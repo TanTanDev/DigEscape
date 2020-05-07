@@ -441,7 +441,9 @@ fn render_game_over(game_state: &mut GameState, ctx: &mut Context) -> GameResult
     Ok(())
 }
 
-const MAP_NAMES: &[&str] = &["/map.txt","/map2.txt", "/map3.txt", "/map4.txt", "/map5.txt"];
+const MAP_NAMES: &[&str] = &["/map_first.txt","/map_1skeleton.txt"
+    ,"/map_2skeleton.txt", "/map_gravity.txt", "/map_teleport.txt"
+    ,"/map_simple_backtrack.txt", "/map_2skeleton_backtrack.txt", "/map_3skeleton.txt"];
 const MAP_COUNT: usize = MAP_NAMES.len();
 
 fn get_map_name(index: usize) -> &'static str {
