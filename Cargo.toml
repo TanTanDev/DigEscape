@@ -1,11 +1,11 @@
 [package]
-name = "diggity_2"
+name = "dig_escape"
 version = "0.1.0"
 authors = ["TanTanDev <tantangamedev@gmail.com>"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-ggez = "0.5"
+gwg = {git = "https://github.com/TanTanDev/good-web-game", package = "good-web-game"}
+nalgebra = { version = "0.20", features = ["mint"] }
 rand = "0.7.3"
+mint = "0.5"

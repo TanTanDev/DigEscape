@@ -2,13 +2,17 @@ use std::io::{Read};
 use std::f32;
 use std::path;
 use std::env;
-use ggez;
+
+// Magic!
+use gwg as ggez;
+
+use mint;
 use ggez::{Context, GameResult};
 use ggez::conf::*;
 use ggez::event;
 use ggez::graphics;
 use ggez::graphics::{Color, DrawParam, FilterMode};
-use ggez::nalgebra as na;
+use nalgebra as na;
 use ggez::event::{KeyCode, KeyMods};
 use std::collections::HashMap;
 
@@ -174,7 +178,6 @@ struct BuriedComponent {
     is_released: bool,
 }
 
-#[derive(Default)]
 struct GameState {
     player: Player,
     grasses: Vec<Grass>,
@@ -182,7 +185,8 @@ struct GameState {
     skeletons: Vec<Skeleton>,
     teleporters: [Option<Teleporter>; 2],
     exit: Exit,
-    game_over_text: ggez::graphics::Text,
+    map_size: na::Point2::<f32>,
+    // game_over_text: ggez::graphics::Text,
 }
 
 struct SpriteCollection {
@@ -197,13 +201,19 @@ impl SpriteCollection {
 
 impl GameState {
     fn new() -> GameState {
-        let mut game_over_text = graphics::Text::new("GAME OVER...\nPress <R> to restart!");
-        game_over_text.set_font(graphics::Font::default(), graphics::Scale::uniform(60.0));
-        game_over_text.set_bounds(na::Point2::new(700.0, f32::INFINITY), graphics::Align::Center);
+       // let mut game_over_text = graphics::Text::new("GAME OVER...\nPress <R> to restart!");
+       // game_over_text.set_font(graphics::Font::default(), graphics::Scale::uniform(60.0));
+       // game_over_text.set_bounds(na::Point2::new(700.0, f32::INFINITY), graphics::Align::Center);
  
         GameState {
-            game_over_text,
-            ..Default::default()
+       //     game_over_text,
+            map_size: na::Point2::new(0.0,0.0),
+            player: Player::default(),
+            grasses: vec![],
+            skeleton_blocks: vec![],
+            skeletons: vec![],
+            teleporters: [None, None],
+            exit: Exit::default(),
         }
     }
 }
@@ -212,22 +222,23 @@ struct MainState {
     game_state: GameState,
     sprite_collection: SpriteCollection,
     current_map: usize,
+    screen_size: na::Point2::<f32>,
 }
 
 impl MainState {
     fn new(ctx: &mut Context) -> GameResult<MainState> {
         let mut images = [
-            graphics::Image::new(ctx, "/player.png")?,
-            graphics::Image::new(ctx, "/ground.png")?,
-            graphics::Image::new(ctx, "/unburied.png")?,
-            graphics::Image::new(ctx, "/buried.png")?,
-            graphics::Image::new(ctx, "/skeleton_neutral.png")?,
-            graphics::Image::new(ctx, "/blue_door.png")?,
-            graphics::Image::new(ctx, "/red_door.png")?,
-            graphics::Image::new(ctx, "/skeleton_attack.png")?,
-            graphics::Image::new(ctx, "/player_dig.png")?,
-            graphics::Image::new(ctx, "/player_dead.png")?,
-            graphics::Image::new(ctx, "/ground_below.png")?,
+            graphics::Image::new(ctx, "player.png")?,
+            graphics::Image::new(ctx, "ground.png")?,
+            graphics::Image::new(ctx, "unburied.png")?,
+            graphics::Image::new(ctx, "buried.png")?,
+            graphics::Image::new(ctx, "skeleton_neutral.png")?,
+            graphics::Image::new(ctx, "blue_door.png")?,
+            graphics::Image::new(ctx, "red_door.png")?,
+            graphics::Image::new(ctx, "skeleton_attack.png")?,
+            graphics::Image::new(ctx, "player_dig.png")?,
+            graphics::Image::new(ctx, "player_dead.png")?,
+            graphics::Image::new(ctx, "ground_below.png")?,
         ];
 
         for img in &mut images {
@@ -244,7 +255,11 @@ impl MainState {
             sprite_collection,
             game_state,
             current_map: 0,
+            screen_size : na::Point2::new(0.0, 0.0),
         };
+        use ggez::event::EventHandler;
+        let (w,h) = ggez::graphics::size(ctx);
+        main_state.resize_event(ctx, w, h);
         Ok(main_state)
     }
 }
@@ -268,7 +283,7 @@ impl event::EventHandler for MainState {
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         graphics::clear(ctx, CLEAR_COLOR);
-        render_system(&mut self.game_state, &self.sprite_collection, ctx);
+        render_system(&mut self.game_state, &self.sprite_collection, ctx, &self.screen_size);
 
         graphics::present(ctx)?;
         Ok(())
@@ -296,57 +311,72 @@ impl event::EventHandler for MainState {
             _ => {},
         }
     }
+
+    fn resize_event(&mut self, ctx: &mut Context, w: f32, h: f32) {
+        // This scaling code is a mess, send halp
+        let mapW = 10.0;
+        let mapH = 8.0;
+        let sprite_scale = (h / mapH).min(w / mapW);
+        self.screen_size.x = sprite_scale;
+        self.screen_size.y = sprite_scale;
+        let offsetX = (w - mapW*sprite_scale)*0.5;
+        let offsetY = (h - mapH*sprite_scale)*0.5;
+        ggez::graphics::set_screen_coordinates(ctx, ggez::graphics::Rect::new(-offsetX,-offsetY,w,h));
+    }
 }
 
 fn render_sprite(sprite_collection: &SpriteCollection, ctx: &mut Context, transform_component: &TransformComponent,
-    sprite: &SpriteComponent) -> GameResult
+    sprite: &SpriteComponent, screen_size: &na::Point2::<f32>) -> GameResult
 {
-    let mut offset = ggez::mint::Point2{x:0.0, y:0.0};
-    let final_scale = sprite.scale.x * GAME_SCALE;
+    let mut offset = mint::Point2{x:0.0, y:0.0};
+    let final_scale = sprite.scale.x * screen_size.x;
     let mut flip_scale: f32 = 1.0;
     if sprite.is_flipped {
        flip_scale =-1.0;
        offset.x = 1.0;
     }
+    let dest = na::convert::<na::Point2::<i32>, na::Point2::<f32>>(transform_component.position) * final_scale; 
     let params = DrawParam::default()
         .offset(offset)
-        .scale(na::Vector2::<f32>::new(flip_scale * final_scale, final_scale))
-        .dest(na::convert::<na::Point2::<i32>, na::Point2::<f32>>(transform_component.position) * GAME_SCALE * 16.0);
+        .scale(na::Vector2::<f32>::new(flip_scale * final_scale / 16.0, final_scale / 16.0))
+        .dest(dest);
 
     let image = sprite_collection.images.get(sprite.texture_index).expect("No image with id...");
     graphics::draw(ctx, image, params)?;
     Ok(()) 
 }
 
-fn render_system(game_state: &mut GameState, sprite_collection: &SpriteCollection, ctx: &mut Context) {
-   render_sprite(sprite_collection, ctx, &game_state.exit.transform, &game_state.exit.sprite);
+fn render_system(game_state: &mut GameState, sprite_collection: &SpriteCollection, ctx: &mut Context
+    , screen_size: &na::Point2::<f32>)
+{
+   render_sprite(sprite_collection, ctx, &game_state.exit.transform, &game_state.exit.sprite, screen_size);
    for grass in &game_state.grasses{
-        render_sprite(sprite_collection, ctx, &grass.transform, &grass.sprite);
+        render_sprite(sprite_collection, ctx, &grass.transform, &grass.sprite, screen_size);
    }
    for skeleton_block in &game_state.skeleton_blocks {
-        render_sprite(sprite_collection, ctx, &skeleton_block.transform, &skeleton_block.sprite);
+        render_sprite(sprite_collection, ctx, &skeleton_block.transform, &skeleton_block.sprite, screen_size);
    }
    for teleporter_option in game_state.teleporters.iter().map(|t| t.as_ref()) {
        if let Some(teleporter) = teleporter_option {
-            render_sprite(sprite_collection, ctx, &teleporter.transform, &teleporter.sprite);
+            render_sprite(sprite_collection, ctx, &teleporter.transform, &teleporter.sprite, screen_size);
         }
    }
    for skeleton in game_state.skeletons.iter() {
-        render_sprite(sprite_collection, ctx, &skeleton.transform, &skeleton.sprite);
+        render_sprite(sprite_collection, ctx, &skeleton.transform, &skeleton.sprite, screen_size);
    }
-   render_sprite(sprite_collection, ctx, &game_state.player.transform, &game_state.player.sprite);
+   render_sprite(sprite_collection, ctx, &game_state.player.transform, &game_state.player.sprite, screen_size);
    render_game_over(game_state, ctx);
 }
 
 fn render_game_over(game_state: &mut GameState, ctx: &mut Context) -> GameResult {
-    if !game_state.player.is_alive {
-        let (sizeX, sizeY) = ggez::graphics::size(ctx);
-        let mut pos_centered = na::Point2::new(sizeX*0.5, sizeY*0.5);
-        let (textW, textH) = game_state.game_over_text.dimensions(ctx);
-        pos_centered.x -= textW as f32 *0.5;
-        pos_centered.y -= textH as f32 *0.5;
-        graphics::draw(ctx, &game_state.game_over_text, (pos_centered, graphics::WHITE),)?;
-    }
+    //if !game_state.player.is_alive {
+    //    let (sizeX, sizeY) = ggez::graphics::size(ctx);
+    //    let mut pos_centered = na::Point2::new(sizeX*0.5, sizeY*0.5);
+    //    let (textW, textH) = game_state.game_over_text.dimensions(ctx);
+    //    pos_centered.x -= textW as f32 *0.5;
+    //    pos_centered.y -= textH as f32 *0.5;
+    //    graphics::draw(ctx, &game_state.game_over_text, (pos_centered, graphics::WHITE),)?;
+    //}
     Ok(())
 }
 
@@ -655,19 +685,28 @@ fn player_system(game_state: &mut GameState, ctx: &mut Context, current_map: &mu
 }
 
 fn main() -> GameResult {
-    let resource_dir = if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
-        let mut path = path::PathBuf::from(manifest_dir);
-        path.push("resources");
-        path
-    } else {
-        path::PathBuf::from("./resources")
-    };
+    //let resource_dir = if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
+    //    let mut path = path::PathBuf::from(manifest_dir);
+    //    path.push("resources");
+    //    path
+    //} else {
+    //    path::PathBuf::from("./resources")
+    //};
 
-    let cb = ggez::ContextBuilder::new("Diggity2", "ggez")
-        .window_setup(WindowSetup::default().title("Diggity"))
-        .add_resource_path(resource_dir);
+    //let cb = ggez::ContextBuilder::new("Diggity2", "ggez")
+    //    .window_setup(WindowSetup::default().title("Diggity"))
+    //    .add_resource_path(resource_dir);
 
-    let (ctx, event_loop) = &mut cb.build()?;
-    let state = &mut MainState::new(ctx)?;
-    event::run(ctx, event_loop, state)
+    //let (ctx, event_loop) = &mut cb.build()?;
+    //let state = &mut MainState::new(ctx)?;
+    //event::run(ctx, event_loop, state)
+    //
+    ggez::start(
+        ggez::conf::Conf{
+            cache: ggez::conf::Cache::Tar(include_bytes!("resources.tar").to_vec()),
+            loading: ggez::conf::Loading::Embedded,
+            ..Default::default()
+        }, // conf
+        |mut context| Box::new(MainState::new(&mut context).unwrap()),
+    ) // ggez::start
 }
