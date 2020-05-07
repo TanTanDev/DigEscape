@@ -15,6 +15,7 @@ use ggez::graphics::{Color, DrawParam, FilterMode};
 use nalgebra as na;
 use ggez::event::{KeyCode, KeyMods};
 use std::collections::HashMap;
+use ggez::audio;
 
 const CLEAR_COLOR: Color = Color::new(0.1,0.2,0.3,1.0);
 const GAME_SCALE: f32 = 5.0;
@@ -189,6 +190,19 @@ struct GameState {
     // game_over_text: ggez::graphics::Text,
 }
 
+struct SoundCollection {
+    sounds: [audio::Source; 7], 
+}
+
+impl SoundCollection {
+    fn play(&mut self, index: usize) -> GameResult<()> {
+        if let Some(source) = self.sounds.get_mut(index) {
+            source.play()?;
+        }
+        Err(ggez::error::GameError::SoundError)
+    }
+}
+
 struct SpriteCollection {
     images: [graphics::Image; 11],
 }
@@ -221,6 +235,7 @@ impl GameState {
 struct MainState {
     game_state: GameState,
     sprite_collection: SpriteCollection,
+    sound_collection: SoundCollection,
     current_map: usize,
     screen_size: na::Point2::<f32>,
 }
@@ -249,10 +264,24 @@ impl MainState {
             images
         };
 
+        let mut sounds = [
+            audio::Source::new(ctx, "player_walk.wav")?,
+            audio::Source::new(ctx, "player_dig.wav")?,
+            audio::Source::new(ctx, "player_hit.wav")?,
+            audio::Source::new(ctx, "player_teleport.wav")?,
+            audio::Source::new(ctx, "level_completed.wav")?,
+            audio::Source::new(ctx, "skeleton_attack.wav")?,
+            audio::Source::new(ctx, "door_locked.wav")?,
+        ];
+        let sound_collection = SoundCollection {
+            sounds,
+        };
+
         let mut game_state = GameState::new();
         load_map(ctx, &mut game_state, 0);
         let mut main_state = MainState{
             sprite_collection,
+            sound_collection,
             game_state,
             current_map: 0,
             screen_size : na::Point2::new(0.0, 0.0),
@@ -260,6 +289,7 @@ impl MainState {
         use ggez::event::EventHandler;
         let (w,h) = ggez::graphics::size(ctx);
         main_state.resize_event(ctx, w, h);
+        audio::maybe_create_soundmixer(ctx);
         Ok(main_state)
     }
 }
@@ -274,9 +304,9 @@ impl event::EventHandler for MainState {
                 &self.game_state.skeletons, &self.game_state.skeleton_blocks);
         }
         if should_step {
-            player_system(&mut self.game_state, ctx, &mut self.current_map);
-            skeleton_system(&mut self.game_state);
-            skeleton_block_system(&mut self.game_state);
+            player_system(&mut self.game_state, ctx, &mut self.current_map, &mut self.sound_collection);
+            skeleton_system(&mut self.game_state, ctx, &mut self.sound_collection);
+            skeleton_block_system(&mut self.game_state, &mut self.sound_collection);
         }
         Ok(())
     }
@@ -441,7 +471,7 @@ fn load_map(ctx: &mut Context, game_state: &mut GameState, map_index: usize) {
     }
 }
 
-fn skeleton_block_system(game_state: &mut GameState) {
+fn skeleton_block_system(game_state: &mut GameState, sound_collection: &mut SoundCollection) {
     for skeleton_block in game_state.skeleton_blocks.iter_mut() {
         let pos_above = skeleton_block.transform.position - na::Vector2::new(0, 1);
         let mut is_occupied = game_state.player.transform.position == pos_above;
@@ -460,6 +490,7 @@ fn skeleton_block_system(game_state: &mut GameState) {
                 new_skeleton.sprite.is_flipped = true;
             }
             game_state.skeletons.push(new_skeleton);
+            sound_collection.play(5);
        }
     }
 }
@@ -470,7 +501,7 @@ fn skeleton_reset_turns(game_state: &mut GameState) {
     }
 }
 
-fn skeleton_walk(game_state: &mut GameState) {
+fn skeleton_walk(game_state: &mut GameState, sound_collection: &mut SoundCollection) {
     let pos_player = game_state.player.transform.position;
     let mut skeleton_new_positions = HashMap::new();
     let mut skeleton_wants_attack: Vec<usize> = vec![];
@@ -500,6 +531,7 @@ fn skeleton_walk(game_state: &mut GameState) {
             let mut is_occupied = pos_skele == pos_player;
             if is_occupied {
                 skeleton_wants_attack.push(index);
+                sound_collection.play(5);
                 continue;
             }
             is_occupied |= game_state.grasses.iter().any(|g|g.transform.position == pos_skele);
@@ -544,7 +576,7 @@ fn skeleton_walk(game_state: &mut GameState) {
     }
 }
 
-fn skeleton_attack(game_state: &mut GameState) {
+fn skeleton_attack(game_state: &mut GameState, ctx: &mut Context, sound_collection: &mut SoundCollection) {
     let player = &mut game_state.player;
     let pos_player = &player.transform.position;
     for skeleton in game_state.skeletons.iter_mut()
@@ -564,6 +596,7 @@ fn skeleton_attack(game_state: &mut GameState) {
                 player.sprite.texture_index = 9;
                 skeleton.ai.state = AiState::Walk;    
                 skeleton.sprite.texture_index = 4;
+                sound_collection.play(2);
             },
             false => {
                 skeleton.ai.state = AiState::Walk;    
@@ -574,9 +607,9 @@ fn skeleton_attack(game_state: &mut GameState) {
     }
 }
 
-fn skeleton_system(game_state: &mut GameState) {
-    skeleton_attack(game_state);
-    skeleton_walk(game_state);
+fn skeleton_system(game_state: &mut GameState, ctx: &mut Context, sound_collection: &mut SoundCollection) {
+    skeleton_attack(game_state, ctx, sound_collection);
+    skeleton_walk(game_state, sound_collection);
     skeleton_reset_turns(game_state);
 }
 
@@ -586,8 +619,9 @@ fn in_bounds(position: &mut na::Point2::<i32>) {
     if position.y > GAME_BOUNDS_Y {position.y = 0}
 }
 
-fn player_system(game_state: &mut GameState, ctx: &mut Context, current_map: &mut usize) {
-
+fn player_system(game_state: &mut GameState, ctx: &mut Context
+    , current_map: &mut usize, sound_collection: &mut SoundCollection)
+{
     let mut should_exit = false;
     
     let player = &mut game_state.player;
@@ -615,6 +649,7 @@ fn player_system(game_state: &mut GameState, ctx: &mut Context, current_map: &mu
             let is_occupied = occupied_by_grass || occupied_by_skeleton || occupied_by_skeleton_block;
             if !is_occupied {
                 player.transform.position = new_position;
+                sound_collection.play(0);
             }
         },
         PlayerInputIntent::Right => {
@@ -626,6 +661,7 @@ fn player_system(game_state: &mut GameState, ctx: &mut Context, current_map: &mu
             let is_occupied = occupied_by_grass || occupied_by_skeleton || occupied_by_skeleton_block;
             if !is_occupied {
                 player.transform.position = new_position;
+                sound_collection.play(0);
             }
         },
         PlayerInputIntent::Up => {
@@ -643,6 +679,7 @@ fn player_system(game_state: &mut GameState, ctx: &mut Context, current_map: &mu
                 let other_teleporter_option = game_state.teleporters.get(other_teleporter_index).unwrap();
                 if let Some(other_teleporter) = other_teleporter_option {
                     player.transform.position = other_teleporter.transform.position;
+                    sound_collection.play(3);
                 }
             }
             // Exit
@@ -650,6 +687,9 @@ fn player_system(game_state: &mut GameState, ctx: &mut Context, current_map: &mu
             let all_skeletons_freed = game_state.skeleton_blocks.iter().all(|s|s.buried.is_released);
             if is_on_exit && all_skeletons_freed {
                 should_exit = true;
+                sound_collection.play(4);
+            } else {
+                sound_collection.play(6);
             }
         },
         PlayerInputIntent::Down => {
@@ -657,6 +697,7 @@ fn player_system(game_state: &mut GameState, ctx: &mut Context, current_map: &mu
             let skeleton_block_option = game_state.skeleton_blocks.iter_mut().find(|s| s.transform.position == pos_below);
             if let Some(skeleton_block) = skeleton_block_option {
                 skeleton_block.dig();
+                sound_collection.play(1);
             }
             player.sprite.texture_index = 8;
         },

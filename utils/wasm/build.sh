@@ -13,5 +13,6 @@ mkdir static
 cp target/wasm32-unknown-unknown/release/dig_escape.wasm static/
 cp utils/wasm/index.html static/
 cp utils/wasm/gl.js static/
+cp utils/wasm/audio.js static/
 cp utils/wasm/resources.tar static/
 ls -lh static
