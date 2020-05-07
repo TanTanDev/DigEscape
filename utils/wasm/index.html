@@ -18,7 +18,16 @@
 </head>
 
 <body>
-    <canvas id="glcanvas" tabindex='1'></canvas>
+    <canvas id="glcanvas" tabindex='1' onfocus="event.preventDefault()"></canvas>
+
+	<script>
+		window.addEventListener("keydown", function(e) {
+ 			if([32, 37, 38, 39, 40].indexOf(e.keyCode) > -1) {
+ 				e.preventDefault();
+ 			}
+		}, false);
+	</script>
+
     <!-- Minified and statically hosted version of https://github.com/not-fl3/miniquad/blob/master/native/sapp-wasm/js/gl.js -->
     <script src="gl.js"></script>
     <script src="audio.js"></script>
