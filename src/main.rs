@@ -191,11 +191,15 @@ struct GameState {
 }
 
 struct SoundCollection {
-    sounds: [audio::Source; 7], 
+    sounds: [audio::Source; 7],
+    is_on: bool,
 }
 
 impl SoundCollection {
     fn play(&mut self, index: usize) -> GameResult<()> {
+        if !self.is_on {
+            return Ok(());
+        }
         if let Some(source) = self.sounds.get_mut(index) {
             source.play()?;
         }
@@ -204,7 +208,7 @@ impl SoundCollection {
 }
 
 struct SpriteCollection {
-    images: [graphics::Image; 11],
+    images: [graphics::Image; 13],
 }
 
 impl SpriteCollection {
@@ -254,6 +258,8 @@ impl MainState {
             graphics::Image::new(ctx, "player_dig.png")?,
             graphics::Image::new(ctx, "player_dead.png")?,
             graphics::Image::new(ctx, "ground_below.png")?,
+            graphics::Image::new(ctx, "sound_on.png")?,
+            graphics::Image::new(ctx, "sound_off.png")?,
         ];
 
         for img in &mut images {
@@ -274,6 +280,7 @@ impl MainState {
             audio::Source::new(ctx, "door_locked.wav")?,
         ];
         let sound_collection = SoundCollection {
+            is_on: true,
             sounds,
         };
 
@@ -313,7 +320,7 @@ impl event::EventHandler for MainState {
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         graphics::clear(ctx, CLEAR_COLOR);
-        render_system(&mut self.game_state, &self.sprite_collection, ctx, &self.screen_size);
+        render_system(&mut self.game_state, &self.sprite_collection, ctx, &self.screen_size, &self.sound_collection);
 
         graphics::present(ctx)?;
         Ok(())
@@ -338,6 +345,9 @@ impl event::EventHandler for MainState {
                 clear_map(&mut self.game_state);
                 load_map(ctx, &mut self.game_state, self.current_map);
             },
+            KeyCode::M => {
+                self.sound_collection.is_on = !self.sound_collection.is_on;
+            }
             _ => {},
         }
     }
@@ -352,6 +362,14 @@ impl event::EventHandler for MainState {
         let offsetX = (w - mapW*sprite_scale)*0.5;
         let offsetY = (h - mapH*sprite_scale)*0.5;
         ggez::graphics::set_screen_coordinates(ctx, ggez::graphics::Rect::new(-offsetX,-offsetY,w,h));
+    }
+
+    fn mouse_button_up_event(&mut self, ctx: &mut Context, button: ggez::event::MouseButton, x: f32, y: f32) {
+        let screen_rect = ggez::graphics::screen_coordinates(ctx);
+        let volume_rect = ggez::graphics::Rect::new(-screen_rect.x, -screen_rect.y, 64.0, 64.0);
+        if volume_rect.contains(na::Point2::new(x, y)) {
+            self.sound_collection.is_on = !self.sound_collection.is_on; 
+        }
     }
 }
 
@@ -377,7 +395,7 @@ fn render_sprite(sprite_collection: &SpriteCollection, ctx: &mut Context, transf
 }
 
 fn render_system(game_state: &mut GameState, sprite_collection: &SpriteCollection, ctx: &mut Context
-    , screen_size: &na::Point2::<f32>)
+    , screen_size: &na::Point2::<f32>, sound_collection: &SoundCollection)
 {
    render_sprite(sprite_collection, ctx, &game_state.exit.transform, &game_state.exit.sprite, screen_size);
    for grass in &game_state.grasses{
@@ -396,6 +414,19 @@ fn render_system(game_state: &mut GameState, sprite_collection: &SpriteCollectio
    }
    render_sprite(sprite_collection, ctx, &game_state.player.transform, &game_state.player.sprite, screen_size);
    render_game_over(game_state, ctx);
+   render_sound_button(ctx, sprite_collection, sound_collection);
+}
+
+fn render_sound_button(ctx: &mut Context, sprite_collection: &SpriteCollection, sound_collection: &SoundCollection) {
+    let params = DrawParam::default()
+        //.scale(na::Vector2::<f32>::new(flip_scale * final_scale / 16.0, final_scale / 16.0))
+        .dest(na::Point2::new(0.0,0.0));
+    let image_index = match sound_collection.is_on {
+        true => 11,
+        false => 12,
+    };
+    let image = sprite_collection.images.get(image_index).expect("No image with id...");
+    graphics::draw(ctx, image, params);
 }
 
 fn render_game_over(game_state: &mut GameState, ctx: &mut Context) -> GameResult {
@@ -697,8 +728,8 @@ fn player_system(game_state: &mut GameState, ctx: &mut Context
             let skeleton_block_option = game_state.skeleton_blocks.iter_mut().find(|s| s.transform.position == pos_below);
             if let Some(skeleton_block) = skeleton_block_option {
                 skeleton_block.dig();
-                sound_collection.play(1);
             }
+            sound_collection.play(1);
             player.sprite.texture_index = 8;
         },
         PlayerInputIntent::None => {}
