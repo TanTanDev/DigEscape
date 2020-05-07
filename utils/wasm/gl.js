@@ -363,6 +363,8 @@ into_sapp_mousebutton = function (btn) {
 
 into_sapp_keycode = function (key_code) {
     switch (key_code) {
+        case "KeyM": return 77;
+        case "KeyR": return 82;
         case "Digit0": return 48;
         case "Digit1": return 49;
         case "Digit2": return 50;
