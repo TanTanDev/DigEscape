@@ -38,7 +38,7 @@ impl Default for PlayerInputIntent {
     }
 }
 
-#[derive(Default)]
+//#[derive(Default)]
 struct Player {
     transform: TransformComponent,
     sprite: SpriteComponent,
@@ -46,11 +46,28 @@ struct Player {
     time_since_step: f32,
     is_alive: bool,
     is_on_skeleton: bool, // Used for other to look at
+    prev_grounded: bool,
+}
+
+impl Default for Player
+{
+    fn default() -> Self {
+        Player {
+            prev_grounded: true,
+            is_on_skeleton: false,
+            is_alive: true,
+            time_since_step: 0.0,
+            input_intent: PlayerInputIntent::None,
+            sprite: SpriteComponent::default(),
+            transform: TransformComponent::default()
+        }
+    }
 }
 
 impl Player {
-    fn should_step(&mut self, dt: f32, grasses: &Vec<Grass>,
-        skeletons: &Vec<Skeleton>, skeleton_blocks: &Vec<SkeletonBlock>) -> bool
+    fn should_step(&mut self, dt: f32, grasses: &Vec<Grass>
+        , skeletons: &Vec<Skeleton>, skeleton_blocks: &Vec<SkeletonBlock>
+        , sound_collection: &mut SoundCollection) -> bool
     {
         if !self.is_alive {
             return false;
@@ -71,8 +88,13 @@ impl Player {
             is_grounded |= skeleton_blocks.iter().any(|s|s.transform.position == pos_below);
 
             if !is_grounded {
-            self.time_since_step = 0.0;
+                self.time_since_step = 0.0;
                 return true;
+            }
+            if is_grounded && !self.prev_grounded {
+                self.sprite.texture_index = 0;
+                self.prev_grounded = true;
+                sound_collection.play(8);
             }
        }
        false
@@ -191,7 +213,7 @@ struct GameState {
 }
 
 struct SoundCollection {
-    sounds: [audio::Source; 7],
+    sounds: [audio::Source; 9],
     is_on: bool,
 }
 
@@ -208,7 +230,7 @@ impl SoundCollection {
 }
 
 struct SpriteCollection {
-    images: [graphics::Image; 13],
+    images: [graphics::Image; 14],
 }
 
 impl SpriteCollection {
@@ -260,6 +282,7 @@ impl MainState {
             graphics::Image::new(ctx, "ground_below.png")?,
             graphics::Image::new(ctx, "sound_on.png")?,
             graphics::Image::new(ctx, "sound_off.png")?,
+            graphics::Image::new(ctx, "player_fall.png")?,
         ];
 
         for img in &mut images {
@@ -278,6 +301,8 @@ impl MainState {
             audio::Source::new(ctx, "level_completed.wav")?,
             audio::Source::new(ctx, "skeleton_attack.wav")?,
             audio::Source::new(ctx, "door_locked.wav")?,
+            audio::Source::new(ctx, "player_fall.wav")?,
+            audio::Source::new(ctx, "player_land.wav")?,
         ];
         let sound_collection = SoundCollection {
             is_on: true,
@@ -307,8 +332,9 @@ impl event::EventHandler for MainState {
         let mut should_step = false;
         {
             let player = &mut self.game_state.player;
-            should_step = player.should_step(delta, &self.game_state.grasses,
-                &self.game_state.skeletons, &self.game_state.skeleton_blocks);
+            should_step = player.should_step(delta, &self.game_state.grasses
+                , &self.game_state.skeletons, &self.game_state.skeleton_blocks
+                , &mut self.sound_collection);
         }
         if should_step {
             player_system(&mut self.game_state, ctx, &mut self.current_map, &mut self.sound_collection);
@@ -443,7 +469,8 @@ fn render_game_over(game_state: &mut GameState, ctx: &mut Context) -> GameResult
 
 const MAP_NAMES: &[&str] = &["/map_first.txt","/map_1skeleton.txt"
     ,"/map_2skeleton.txt", "/map_gravity.txt", "/map_teleport.txt"
-    ,"/map_simple_backtrack.txt", "/map_2skeleton_backtrack.txt", "/map_3skeleton.txt"];
+    ,"/map_simple_backtrack.txt", "/map_2skeleton_backtrack.txt", "/map_3skeleton.txt"
+    ,"/map_skeleton_hole.txt"];
 const MAP_COUNT: usize = MAP_NAMES.len();
 
 fn get_map_name(index: usize) -> &'static str {
@@ -663,8 +690,15 @@ fn player_system(game_state: &mut GameState, ctx: &mut Context
     is_grounded |= game_state.skeletons.iter().any(|s|s.transform.position == pos_below);
     is_grounded |= game_state.skeleton_blocks.iter().any(|s|s.transform.position == pos_below);
 
+    if player.prev_grounded && !is_grounded {
+        sound_collection.play(7);
+        player.sprite.texture_index = 13;
+    }
+
+    player.prev_grounded = is_grounded;
     if !is_grounded {
         player.transform.position = pos_below;
+
         if player.transform.position.y > GAME_BOUNDS_Y {
             player.transform.position.y = 0;
         }
