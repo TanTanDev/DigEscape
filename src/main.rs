@@ -17,9 +17,10 @@ use ggez::event::{KeyCode, KeyMods};
 use std::collections::HashMap;
 use ggez::audio;
 
-const CLEAR_COLOR: Color = Color::new(0.1,0.2,0.3,1.0);
+const CLEAR_COLOR: Color = Color::new(0.0,0.0,0.0,1.0);
+const BACKGROUND_GAME: Color = Color::new(0.1,0.2,0.3,1.0);
 const GAME_SCALE: f32 = 5.0;
-const TIME_AUTO_STEP: f32 = 0.1;
+const TIME_AUTO_STEP: f32 = 0.2;
 const GAME_BOUNDS_Y: i32 = 7;
 const GAME_BOUNDS_X: i32 = 9;
 
@@ -209,11 +210,11 @@ struct GameState {
     teleporters: [Option<Teleporter>; 2],
     exit: Exit,
     map_size: na::Point2::<f32>,
-    // game_over_text: ggez::graphics::Text,
+    game_over_text: ggez::graphics::Text,
 }
 
 struct SoundCollection {
-    sounds: [audio::Source; 9],
+    sounds: [audio::Source; 10],
     is_on: bool,
 }
 
@@ -240,13 +241,12 @@ impl SpriteCollection {
 }
 
 impl GameState {
-    fn new() -> GameState {
-       // let mut game_over_text = graphics::Text::new("GAME OVER...\nPress <R> to restart!");
-       // game_over_text.set_font(graphics::Font::default(), graphics::Scale::uniform(60.0));
-       // game_over_text.set_bounds(na::Point2::new(700.0, f32::INFINITY), graphics::Align::Center);
+    fn new(ctx: &mut Context) -> GameState {
+        let font = graphics::Font::new(ctx, "kenny_fontpackage/Fonts/Kenney Blocks.ttf").unwrap();
+        let mut game_over_text = graphics::Text::new(("PRESS (R) to restart!", font, 60.0));
  
         GameState {
-       //     game_over_text,
+            game_over_text,
             map_size: na::Point2::new(0.0,0.0),
             player: Player::default(),
             grasses: vec![],
@@ -303,13 +303,14 @@ impl MainState {
             audio::Source::new(ctx, "door_locked.wav")?,
             audio::Source::new(ctx, "player_fall.wav")?,
             audio::Source::new(ctx, "player_land.wav")?,
+            audio::Source::new(ctx, "level_restarted.wav")?,
         ];
         let sound_collection = SoundCollection {
             is_on: true,
             sounds,
         };
 
-        let mut game_state = GameState::new();
+        let mut game_state = GameState::new(ctx);
         load_map(ctx, &mut game_state, 0);
         let mut main_state = MainState{
             sprite_collection,
@@ -359,10 +360,10 @@ impl event::EventHandler for MainState {
         }
 
         let intent = match keycode {
-            KeyCode::Right => PlayerInputIntent::Right, 
-            KeyCode::Left => PlayerInputIntent::Left, 
-            KeyCode::Down => PlayerInputIntent::Down, 
-            KeyCode::Up => PlayerInputIntent::Up, 
+            KeyCode::Right | KeyCode::D => PlayerInputIntent::Right, 
+            KeyCode::Left | KeyCode::A=> PlayerInputIntent::Left,
+            KeyCode::Down | KeyCode::S=> PlayerInputIntent::Down, 
+            KeyCode::Up | KeyCode::W=> PlayerInputIntent::Up, 
             _ => PlayerInputIntent::None,
         };
         self.game_state.player.input_intent = intent;
@@ -370,6 +371,7 @@ impl event::EventHandler for MainState {
             KeyCode::R => {
                 clear_map(&mut self.game_state);
                 load_map(ctx, &mut self.game_state, self.current_map);
+                self.sound_collection.play(9);
             },
             KeyCode::M => {
                 self.sound_collection.is_on = !self.sound_collection.is_on;
@@ -423,6 +425,7 @@ fn render_sprite(sprite_collection: &SpriteCollection, ctx: &mut Context, transf
 fn render_system(game_state: &mut GameState, sprite_collection: &SpriteCollection, ctx: &mut Context
     , screen_size: &na::Point2::<f32>, sound_collection: &SoundCollection)
 {
+    render_background(ctx, screen_size);
    render_sprite(sprite_collection, ctx, &game_state.exit.transform, &game_state.exit.sprite, screen_size);
    for grass in &game_state.grasses{
         render_sprite(sprite_collection, ctx, &grass.transform, &grass.sprite, screen_size);
@@ -439,8 +442,15 @@ fn render_system(game_state: &mut GameState, sprite_collection: &SpriteCollectio
         render_sprite(sprite_collection, ctx, &skeleton.transform, &skeleton.sprite, screen_size);
    }
    render_sprite(sprite_collection, ctx, &game_state.player.transform, &game_state.player.sprite, screen_size);
-   render_game_over(game_state, ctx);
+   render_game_over(game_state, ctx, screen_size);
    render_sound_button(ctx, sprite_collection, sound_collection);
+}
+
+fn render_background(ctx: &mut Context, screen_size: &na::Point2::<f32>) {
+    let screen_coordinates = ggez::graphics::screen_coordinates(ctx);
+    let rect = graphics::Rect::new(-screen_coordinates.x*0.0,0.0, screen_size.x*10.0, screen_size.x*8.0);
+    let rectMesh = graphics::Mesh::new_rectangle(ctx, graphics::DrawMode::fill(), rect, BACKGROUND_GAME).unwrap();
+    graphics::draw(ctx, &rectMesh, DrawParam::default());
 }
 
 fn render_sound_button(ctx: &mut Context, sprite_collection: &SpriteCollection, sound_collection: &SoundCollection) {
@@ -455,22 +465,26 @@ fn render_sound_button(ctx: &mut Context, sprite_collection: &SpriteCollection, 
     graphics::draw(ctx, image, params);
 }
 
-fn render_game_over(game_state: &mut GameState, ctx: &mut Context) -> GameResult {
-    //if !game_state.player.is_alive {
-    //    let (sizeX, sizeY) = ggez::graphics::size(ctx);
-    //    let mut pos_centered = na::Point2::new(sizeX*0.5, sizeY*0.5);
-    //    let (textW, textH) = game_state.game_over_text.dimensions(ctx);
-    //    pos_centered.x -= textW as f32 *0.5;
-    //    pos_centered.y -= textH as f32 *0.5;
-    //    graphics::draw(ctx, &game_state.game_over_text, (pos_centered, graphics::WHITE),)?;
-    //}
+fn render_game_over(game_state: &mut GameState, ctx: &mut Context, screen_size: &na::Point2::<f32>) -> GameResult {
+    if !game_state.player.is_alive {
+        //let (sizeX, sizeY) = ggez::graphics::size(ctx);
+        let screen_rect = ggez::graphics::screen_coordinates(ctx);
+        let sizeX = screen_size.x * 10.0;
+        let sizeY = screen_size.x * 8.0;
+        let mut pos_centered = na::Point2::new(sizeX*0.5, sizeY*0.5);
+        let (textW, textH) = game_state.game_over_text.dimensions(ctx);
+        pos_centered.x -= textW as f32 *0.5;
+        pos_centered.y -= textH as f32 *0.5;
+        graphics::draw(ctx, &game_state.game_over_text, (pos_centered, graphics::WHITE),)?;
+    }
     Ok(())
 }
 
 const MAP_NAMES: &[&str] = &["/map_first.txt","/map_1skeleton.txt"
     ,"/map_2skeleton.txt", "/map_gravity.txt", "/map_teleport.txt"
     ,"/map_simple_backtrack.txt", "/map_2skeleton_backtrack.txt", "/map_3skeleton.txt"
-    ,"/map_skeleton_hole.txt"];
+    ,"/map_skeleton_hole.txt", "/map_maze1.txt", "/map_3skeleton_3holes.txt"
+    ,"/map_skeleton_platform.txt", "/map_3skeleton_3holes_harder.txt"];
 const MAP_COUNT: usize = MAP_NAMES.len();
 
 fn get_map_name(index: usize) -> &'static str {
@@ -597,7 +611,9 @@ fn skeleton_walk(game_state: &mut GameState, sound_collection: &mut SoundCollect
             is_occupied |= game_state.grasses.iter().any(|g|g.transform.position == pos_skele);
             is_occupied |= game_state.skeleton_blocks.iter().any(|s|s.transform.position == pos_skele);
             is_occupied |= game_state.skeletons.iter().any(|s|s.transform.position == pos_skele);
-            if !is_occupied && !game_state.player.is_on_skeleton {
+            let pos_above_skeleton = skeleton.transform.position - na::Vector2::new(0, 1);
+            let is_skeleton_above = game_state.skeletons.iter().any(|s|s.transform.position == pos_above_skeleton);
+            if !is_occupied && !game_state.player.is_on_skeleton && !is_skeleton_above {
                 new_position = pos_skele;
             }
         } else { // handle gravity
