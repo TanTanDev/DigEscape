@@ -211,6 +211,8 @@ struct GameState {
     exit: Exit,
     map_size: na::Point2::<f32>,
     game_over_text: ggez::graphics::Text,
+    all_levels_completed_text: ggez::graphics::Text,
+    is_all_levels_completed: bool,
 }
 
 struct SoundCollection {
@@ -244,9 +246,11 @@ impl GameState {
     fn new(ctx: &mut Context) -> GameState {
         let font = graphics::Font::new(ctx, "kenny_fontpackage/Fonts/Kenney Blocks.ttf").unwrap();
         let mut game_over_text = graphics::Text::new(("PRESS (R) to restart!", font, 60.0));
+        let mut all_levels_completed_text = graphics::Text::new(("You completed ALL LEVELS! Press R to play again", font, 30.0));
  
         GameState {
             game_over_text,
+            all_levels_completed_text,
             map_size: na::Point2::new(0.0,0.0),
             player: Player::default(),
             grasses: vec![],
@@ -254,6 +258,7 @@ impl GameState {
             skeletons: vec![],
             teleporters: [None, None],
             exit: Exit::default(),
+            is_all_levels_completed: false,
         }
     }
 }
@@ -330,6 +335,10 @@ impl MainState {
 impl event::EventHandler for MainState {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
         let delta = ggez::timer::delta(ctx).as_secs_f32();
+        if self.game_state.is_all_levels_completed {
+            return Ok(());
+        }
+
         let mut should_step = false;
         {
             let player = &mut self.game_state.player;
@@ -337,6 +346,7 @@ impl event::EventHandler for MainState {
                 , &self.game_state.skeletons, &self.game_state.skeleton_blocks
                 , &mut self.sound_collection);
         }
+
         if should_step {
             player_system(&mut self.game_state, ctx, &mut self.current_map, &mut self.sound_collection);
             skeleton_system(&mut self.game_state, ctx, &mut self.sound_collection);
@@ -369,6 +379,10 @@ impl event::EventHandler for MainState {
         self.game_state.player.input_intent = intent;
         match keycode {
             KeyCode::R => {
+                if self.game_state.is_all_levels_completed {
+                    self.current_map = 0;
+                    self.game_state.is_all_levels_completed = false;
+                }
                 clear_map(&mut self.game_state);
                 load_map(ctx, &mut self.game_state, self.current_map);
                 self.sound_collection.play(9);
@@ -422,10 +436,10 @@ fn render_sprite(sprite_collection: &SpriteCollection, ctx: &mut Context, transf
     Ok(()) 
 }
 
-fn render_system(game_state: &mut GameState, sprite_collection: &SpriteCollection, ctx: &mut Context
+
+fn render_game(game_state: &mut GameState, sprite_collection: &SpriteCollection, ctx: &mut Context
     , screen_size: &na::Point2::<f32>, sound_collection: &SoundCollection)
 {
-    render_background(ctx, screen_size);
    render_sprite(sprite_collection, ctx, &game_state.exit.transform, &game_state.exit.sprite, screen_size);
    for grass in &game_state.grasses{
         render_sprite(sprite_collection, ctx, &grass.transform, &grass.sprite, screen_size);
@@ -442,7 +456,18 @@ fn render_system(game_state: &mut GameState, sprite_collection: &SpriteCollectio
         render_sprite(sprite_collection, ctx, &skeleton.transform, &skeleton.sprite, screen_size);
    }
    render_sprite(sprite_collection, ctx, &game_state.player.transform, &game_state.player.sprite, screen_size);
-   render_game_over(game_state, ctx, screen_size);
+}
+
+fn render_system(game_state: &mut GameState, sprite_collection: &SpriteCollection, ctx: &mut Context
+    , screen_size: &na::Point2::<f32>, sound_collection: &SoundCollection)
+{
+   render_background(ctx, screen_size);
+   if game_state.is_all_levels_completed {
+       render_all_levels_completed(game_state, ctx, screen_size);
+   } else {
+        render_game(game_state, sprite_collection, ctx, screen_size, sound_collection);
+        render_game_over(game_state, ctx, screen_size);
+   }
    render_sound_button(ctx, sprite_collection, sound_collection);
 }
 
@@ -467,23 +492,42 @@ fn render_sound_button(ctx: &mut Context, sprite_collection: &SpriteCollection, 
 
 fn render_game_over(game_state: &mut GameState, ctx: &mut Context, screen_size: &na::Point2::<f32>) -> GameResult {
     if !game_state.player.is_alive {
-        //let (sizeX, sizeY) = ggez::graphics::size(ctx);
-        let screen_rect = ggez::graphics::screen_coordinates(ctx);
-        let sizeX = screen_size.x * 10.0;
-        let sizeY = screen_size.x * 8.0;
-        let mut pos_centered = na::Point2::new(sizeX*0.5, sizeY*0.5);
-        let (textW, textH) = game_state.game_over_text.dimensions(ctx);
-        pos_centered.x -= textW as f32 *0.5;
-        pos_centered.y -= textH as f32 *0.5;
-        graphics::draw(ctx, &game_state.game_over_text, (pos_centered, graphics::WHITE),)?;
+        render_text(&game_state.game_over_text, ctx, screen_size)?;
     }
     Ok(())
 }
 
-const MAP_NAMES: &[&str] = &["/map_first.txt","/map_1skeleton.txt"
+fn render_all_levels_completed(game_state: &mut GameState, ctx: &mut Context, screen_size: &na::Point2::<f32>) -> GameResult {
+   if true {
+        render_text(&game_state.all_levels_completed_text, ctx, screen_size)?;
+   }
+    Ok(())
+}
+
+fn render_text(text: &graphics::Text, ctx: &mut Context, screen_size: &na::Point2::<f32>) -> GameResult {
+    let screen_rect = ggez::graphics::screen_coordinates(ctx);
+    let sizeX = screen_size.x * 10.0;
+    let sizeY = screen_size.x * 8.0;
+    let mut pos_centered = na::Point2::new(sizeX*0.5, sizeY*0.5);
+    let (textW, textH) = text.dimensions(ctx);
+    pos_centered.x -= textW as f32 *0.5;
+    pos_centered.y -= textH as f32 *0.5;
+    graphics::draw(ctx, text, (pos_centered, graphics::WHITE),)?;
+    Ok(())
+}
+
+const MAP_NAMES: &[&str] = &[
+
+    "/map_first.txt","/map_1skeleton.txt"
     ,"/map_2skeleton.txt", "/map_gravity.txt", "/map_teleport.txt"
-    ,"/map_simple_backtrack.txt", "/map_2skeleton_backtrack.txt", "/map_3skeleton.txt"
-    ,"/map_skeleton_hole.txt", "/map_maze1.txt", "/map_3skeleton_3holes.txt"
+    ,"/map_simple_backtrack.txt"
+    ,"/map_follow.txt", "/map_follow_2.txt", "/map_middleclash.txt"
+    ,"/map_2skeleton_intro.txt"
+    ,"/map_maze1.txt"
+    ,"/map_2skeleton_backtrack.txt"
+    ,"/map_skeleton_hole.txt"
+    ,"/map_3skeleton.txt", "/map_3skeleton_3holes.txt"
+    ,"/map_middleclash_2.txt"
     ,"/map_skeleton_platform.txt", "/map_3skeleton_3holes_harder.txt"];
 const MAP_COUNT: usize = MAP_NAMES.len();
 
@@ -800,8 +844,8 @@ fn player_system(game_state: &mut GameState, ctx: &mut Context
     if should_exit {
         clear_map(game_state); 
         *current_map +=1;
-        if *current_map > MAP_COUNT {
-            println!("YOU WIN!");
+        if *current_map >= MAP_COUNT {
+            game_state.is_all_levels_completed = true;
         } else {
             load_map(ctx, game_state, *current_map);
         }
