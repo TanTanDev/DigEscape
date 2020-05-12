@@ -28,6 +28,7 @@ const TIME_VISUAL_LERP: f32 = 1.0/0.2*2.0;
 const GAME_BOUNDS_Y: i32 = 7;
 const GAME_BOUNDS_X: i32 = 9;
 const SIZE_FOILAGE_DELTA: f32 = 0.2;
+const FOILAGE_SPAWN_CHANCE: f32 = 0.6;
 const ROTATION_FOILAGE_MAX: f32 = 1.0;
 const TIME_FOILAGE_SPEED: f32 = 3.0;
 
@@ -44,16 +45,16 @@ struct Foilage {
 }
 
 impl Foilage {
-    fn new(position: na::Point2<f32>) -> Self {
-        let rand_bool = rand::thread_rng().gen::<bool>();
+    fn new(position: na::Point2<f32>, thread_rng: &mut rand::rngs::ThreadRng) -> Self {
+        let rand_bool = thread_rng.gen::<bool>();
         let foilage_type = if rand_bool { FoilageType::Straw } else { FoilageType::Bush };
-        let texture_index = rand::thread_rng().gen_range(14,17+1);
+        let texture_index = thread_rng.gen_range(14,17+1);
         Foilage {
             position,
             sprite: SpriteComponent {
                 texture_index,
                 scale: na::Vector2::new(1.0, 1.0),
-                is_flipped: false,
+                is_flipped: thread_rng.gen::<bool>(),
                 .. Default::default()
             },
             foilage_type, 
@@ -527,7 +528,6 @@ fn render_foilage(game_state: &mut GameState, sprite_collection: &SpriteCollecti
         let mut flip_scale = 1.0;
         if foilage.sprite.is_flipped {
             flip_scale = -1.0;
-            offset.x = 0.0;
         }
         let dest = foilage.position * screen_size.x;
         let mut time = ggez::timer::time_since_start(ctx).as_secs_f32();
@@ -708,12 +708,22 @@ fn load_map(ctx: &mut Context, game_state: &mut GameState, map_index: usize) {
     }
     // foilage time!
     let amount = 20;
+    let mut thread_rng = rand::thread_rng();
     for grass in game_state.grasses.iter().filter(|g| g.sprite.texture_index == 1) {
-    //for i in 0..amount {
-        //let grass = game_state.grasses.get(rand::thread_rng().gen_range(0, game_state.grasses.len())).expect("no grass in map?");
-        let position = na::Point2::new(grass.transform.position.x as f32, grass.transform.position.y as f32);
-        
-        game_state.foilages.push(Foilage::new(position));
+        if thread_rng.gen::<f32>() > FOILAGE_SPAWN_CHANCE {
+            continue;
+        }
+        let foilage_count = thread_rng.gen_range(1,2+1);
+        let mut position = na::Point2::new(grass.transform.position.x as f32, grass.transform.position.y as f32);
+        for _i in 0..foilage_count {
+            // Put in middle of block
+            if foilage_count == 0 {
+                position.x += 0.5;
+            } else {
+                position.x += 0.33;
+            }
+            game_state.foilages.push(Foilage::new(position, &mut thread_rng));
+        }
     }
 }
 
