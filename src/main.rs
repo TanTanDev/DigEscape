@@ -19,8 +19,11 @@ use ggez::audio;
 
 const CLEAR_COLOR: Color = Color::new(0.0,0.0,0.0,1.0);
 const BACKGROUND_GAME: Color = Color::new(0.1,0.2,0.3,1.0);
+const COLOR_BLINK: Color = Color::new(2.0,2.0,2.0,1.0);
 const GAME_SCALE: f32 = 5.0;
+const TIME_BLINK: f32 = 0.4;
 const TIME_AUTO_STEP: f32 = 0.2;
+const TIME_VISUAL_LERP: f32 = 1.0/0.2*2.0;
 const GAME_BOUNDS_Y: i32 = 7;
 const GAME_BOUNDS_X: i32 = 9;
 
@@ -50,8 +53,7 @@ struct Player {
     prev_grounded: bool,
 }
 
-impl Default for Player
-{
+impl Default for Player {
     fn default() -> Self {
         Player {
             prev_grounded: true,
@@ -164,6 +166,8 @@ struct SpriteComponent {
     texture_index: usize,
     scale: na::Vector2<f32>,
     is_flipped: bool,
+    visual_position: na::Point2<f32>,
+    blink_timer: f32,
 }
 
 impl Default for SpriteComponent {
@@ -172,6 +176,8 @@ impl Default for SpriteComponent {
             texture_index: 0,
             scale: na::Vector2::new(1.0, 1.0),
             is_flipped: false,
+            visual_position: na::Point2::new(0.0,0.0),
+            blink_timer: 0.0,
         }
     }
 }
@@ -416,46 +422,59 @@ impl event::EventHandler for MainState {
 }
 
 fn render_sprite(sprite_collection: &SpriteCollection, ctx: &mut Context, transform_component: &TransformComponent,
-    sprite: &SpriteComponent, screen_size: &na::Point2::<f32>) -> GameResult
+    sprite: &mut SpriteComponent, screen_size: &na::Point2::<f32>) -> GameResult
 {
     let mut offset = mint::Point2{x:0.0, y:0.0};
     let final_scale = sprite.scale.x * screen_size.x;
     let mut flip_scale: f32 = 1.0;
     if sprite.is_flipped {
-       flip_scale =-1.0;
+       flip_scale = -1.0;
        offset.x = 1.0;
     }
-    let dest = na::convert::<na::Point2::<i32>, na::Point2::<f32>>(transform_component.position) * final_scale; 
-    let params = DrawParam::default()
+    let delta_time = ggez::timer::delta(ctx).as_secs_f32();
+    let target_position = na::convert::<na::Point2::<i32>, na::Point2::<f32>>(transform_component.position) * final_scale; 
+    sprite.visual_position.x = lerp(sprite.visual_position.x, target_position.x, delta_time*TIME_VISUAL_LERP);
+    sprite.visual_position.y = lerp(sprite.visual_position.y, target_position.y, delta_time*TIME_VISUAL_LERP);
+
+    //let dest = na::convert::<na::Point2::<i32>, na::Point2::<f32>>(transform_component.position) * final_scale; 
+    let dest = sprite.visual_position;
+    let mut params = DrawParam::default()
         .offset(offset)
         .scale(na::Vector2::<f32>::new(flip_scale * final_scale / 16.0, final_scale / 16.0))
         .dest(dest);
+
+    if sprite.blink_timer > 0.0 {
+        sprite.blink_timer -= delta_time;
+        let fraction = (sprite.blink_timer / TIME_BLINK).sin()*0.5+0.5; 
+        let new_color = graphics::Color::new(COLOR_BLINK.r*fraction, COLOR_BLINK.g*fraction,
+            COLOR_BLINK.b*fraction, 1.0);
+        params = params.color(new_color);
+    }
 
     let image = sprite_collection.images.get(sprite.texture_index).expect("No image with id...");
     graphics::draw(ctx, image, params)?;
     Ok(()) 
 }
 
-
 fn render_game(game_state: &mut GameState, sprite_collection: &SpriteCollection, ctx: &mut Context
     , screen_size: &na::Point2::<f32>, sound_collection: &SoundCollection)
 {
-   render_sprite(sprite_collection, ctx, &game_state.exit.transform, &game_state.exit.sprite, screen_size);
-   for grass in &game_state.grasses{
-        render_sprite(sprite_collection, ctx, &grass.transform, &grass.sprite, screen_size);
+   render_sprite(sprite_collection, ctx, &game_state.exit.transform, &mut game_state.exit.sprite, screen_size);
+   for grass in &mut game_state.grasses{
+        render_sprite(sprite_collection, ctx, &grass.transform, &mut grass.sprite, screen_size);
    }
-   for skeleton_block in &game_state.skeleton_blocks {
-        render_sprite(sprite_collection, ctx, &skeleton_block.transform, &skeleton_block.sprite, screen_size);
+   for skeleton_block in &mut game_state.skeleton_blocks {
+        render_sprite(sprite_collection, ctx, &skeleton_block.transform, &mut skeleton_block.sprite, screen_size);
    }
-   for teleporter_option in game_state.teleporters.iter().map(|t| t.as_ref()) {
+   for teleporter_option in game_state.teleporters.iter_mut().map(|t| t.as_mut()) {
        if let Some(teleporter) = teleporter_option {
-            render_sprite(sprite_collection, ctx, &teleporter.transform, &teleporter.sprite, screen_size);
+            render_sprite(sprite_collection, ctx, &teleporter.transform, &mut teleporter.sprite, screen_size);
         }
    }
-   for skeleton in game_state.skeletons.iter() {
-        render_sprite(sprite_collection, ctx, &skeleton.transform, &skeleton.sprite, screen_size);
+   for skeleton in game_state.skeletons.iter_mut() {
+        render_sprite(sprite_collection, ctx, &skeleton.transform, &mut skeleton.sprite, screen_size);
    }
-   render_sprite(sprite_collection, ctx, &game_state.player.transform, &game_state.player.sprite, screen_size);
+   render_sprite(sprite_collection, ctx, &game_state.player.transform, &mut game_state.player.sprite, screen_size);
 }
 
 fn render_system(game_state: &mut GameState, sprite_collection: &SpriteCollection, ctx: &mut Context
@@ -492,19 +511,30 @@ fn render_sound_button(ctx: &mut Context, sprite_collection: &SpriteCollection, 
 
 fn render_game_over(game_state: &mut GameState, ctx: &mut Context, screen_size: &na::Point2::<f32>) -> GameResult {
     if !game_state.player.is_alive {
-        render_text(&game_state.game_over_text, ctx, screen_size)?;
+        let time_since_start = ggez::timer::time_since_start(ctx).as_secs_f32();
+        let distance = 20.0;
+        let speed = 5.0;
+        let offsetY = (time_since_start*speed).sin()*distance;
+        let offsetX = (time_since_start*speed).cos()*distance;
+        render_text(&game_state.game_over_text, ctx, screen_size, na::Vector2::new(offsetX, offsetY))?;
     }
     Ok(())
 }
 
 fn render_all_levels_completed(game_state: &mut GameState, ctx: &mut Context, screen_size: &na::Point2::<f32>) -> GameResult {
    if true {
-        render_text(&game_state.all_levels_completed_text, ctx, screen_size)?;
+        render_text(&game_state.all_levels_completed_text, ctx, screen_size, na::Vector2::new(0.0,0.0))?;
    }
     Ok(())
 }
 
-fn render_text(text: &graphics::Text, ctx: &mut Context, screen_size: &na::Point2::<f32>) -> GameResult {
+fn lerp(from: f32, to: f32, dt: f32) -> f32 {
+    return from + dt * (to - from)
+}
+
+fn render_text(text: &graphics::Text, ctx: &mut Context, screen_size: &na::Point2::<f32>
+        , offset: na::Vector2::<f32>) -> GameResult
+{
     let screen_rect = ggez::graphics::screen_coordinates(ctx);
     let sizeX = screen_size.x * 10.0;
     let sizeY = screen_size.x * 8.0;
@@ -512,7 +542,7 @@ fn render_text(text: &graphics::Text, ctx: &mut Context, screen_size: &na::Point
     let (textW, textH) = text.dimensions(ctx);
     pos_centered.x -= textW as f32 *0.5;
     pos_centered.y -= textH as f32 *0.5;
-    graphics::draw(ctx, text, (pos_centered, graphics::WHITE),)?;
+    graphics::draw(ctx, text, (pos_centered + offset, graphics::WHITE),)?;
     Ok(())
 }
 
@@ -812,11 +842,16 @@ fn player_system(game_state: &mut GameState, ctx: &mut Context
             // Exit
             let is_on_exit = game_state.exit.transform.position == player.transform.position;
             let all_skeletons_freed = game_state.skeleton_blocks.iter().all(|s|s.buried.is_released);
-            if is_on_exit && all_skeletons_freed {
-                should_exit = true;
-                sound_collection.play(4);
-            } else {
-                sound_collection.play(6);
+            if is_on_exit {
+                if all_skeletons_freed {
+                    should_exit = true;
+                    sound_collection.play(4);
+                } else {
+                    sound_collection.play(6);
+                    for skeleton_block in game_state.skeleton_blocks.iter_mut() {
+                        skeleton_block.sprite.blink_timer = TIME_BLINK;
+                    }
+                }
             }
         },
         PlayerInputIntent::Down => {
