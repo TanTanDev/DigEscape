@@ -37,6 +37,9 @@ basic-http-server . # starts server based on current directory
 basic-http-server static # start server in the folder /static
 ```
 
+### External assets with license
+in this project I'm using Kenny assets fonts which is using:
+License: (Creative Commons Zero, CC0)
 
 ### Dependencies
 Forked Game framework [Good-web-game](https://github.com/TanTanDev/good-web-game)
