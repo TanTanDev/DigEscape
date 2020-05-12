@@ -2,6 +2,7 @@ use std::io::{Read};
 use std::f32;
 use std::path;
 use std::env;
+use rand::prelude::*;
 
 // Magic!
 use gwg as ggez;
@@ -26,6 +27,40 @@ const TIME_AUTO_STEP: f32 = 0.2;
 const TIME_VISUAL_LERP: f32 = 1.0/0.2*2.0;
 const GAME_BOUNDS_Y: i32 = 7;
 const GAME_BOUNDS_X: i32 = 9;
+const SIZE_FOILAGE_DELTA: f32 = 0.2;
+const ROTATION_FOILAGE_MAX: f32 = 1.0;
+const TIME_FOILAGE_SPEED: f32 = 3.0;
+
+enum FoilageType {
+    Straw, // Rotates
+    Bush, // Stretches
+}
+
+struct Foilage {
+    position: na::Point2::<f32>,
+    sprite: SpriteComponent,
+    foilage_type: FoilageType,
+    time_offset: f32,
+}
+
+impl Foilage {
+    fn new(position: na::Point2<f32>) -> Self {
+        let rand_bool = rand::thread_rng().gen::<bool>();
+        let foilage_type = if rand_bool { FoilageType::Straw } else { FoilageType::Bush };
+        let texture_index = rand::thread_rng().gen_range(14,17+1);
+        Foilage {
+            position,
+            sprite: SpriteComponent {
+                texture_index,
+                scale: na::Vector2::new(1.0, 1.0),
+                is_flipped: false,
+                .. Default::default()
+            },
+            foilage_type, 
+            time_offset: rand::thread_rng().gen(),
+        }
+    }
+}
 
 #[derive(PartialEq)]
 enum PlayerInputIntent {
@@ -213,6 +248,7 @@ struct GameState {
     grasses: Vec<Grass>,
     skeleton_blocks: Vec<SkeletonBlock>,
     skeletons: Vec<Skeleton>,
+    foilages: Vec<Foilage>,
     teleporters: [Option<Teleporter>; 2],
     exit: Exit,
     map_size: na::Point2::<f32>,
@@ -239,7 +275,7 @@ impl SoundCollection {
 }
 
 struct SpriteCollection {
-    images: [graphics::Image; 14],
+    images: [graphics::Image; 18],
 }
 
 impl SpriteCollection {
@@ -262,6 +298,7 @@ impl GameState {
             grasses: vec![],
             skeleton_blocks: vec![],
             skeletons: vec![],
+            foilages: vec![],
             teleporters: [None, None],
             exit: Exit::default(),
             is_all_levels_completed: false,
@@ -294,6 +331,10 @@ impl MainState {
             graphics::Image::new(ctx, "sound_on.png")?,
             graphics::Image::new(ctx, "sound_off.png")?,
             graphics::Image::new(ctx, "player_fall.png")?,
+            graphics::Image::new(ctx, "foilage_1.png")?,
+            graphics::Image::new(ctx, "foilage_2.png")?,
+            graphics::Image::new(ctx, "foilage_3.png")?,
+            graphics::Image::new(ctx, "foilage_4.png")?,
         ];
 
         for img in &mut images {
@@ -475,6 +516,53 @@ fn render_game(game_state: &mut GameState, sprite_collection: &SpriteCollection,
         render_sprite(sprite_collection, ctx, &skeleton.transform, &mut skeleton.sprite, screen_size);
    }
    render_sprite(sprite_collection, ctx, &game_state.player.transform, &mut game_state.player.sprite, screen_size);
+   render_foilage(game_state, sprite_collection, ctx, screen_size);
+}
+
+fn render_foilage(game_state: &mut GameState, sprite_collection: &SpriteCollection
+    , ctx: &mut Context, screen_size: &na::Point2::<f32>) -> GameResult
+{
+    for foilage in game_state.foilages.iter_mut() {
+        let mut offset = mint::Point2{x:0.5, y:1.0};
+        let mut flip_scale = 1.0;
+        if foilage.sprite.is_flipped {
+            flip_scale = -1.0;
+            offset.x = 0.0;
+        }
+        let dest = foilage.position * screen_size.x;
+        let mut time = ggez::timer::time_since_start(ctx).as_secs_f32();
+        time *= TIME_FOILAGE_SPEED;
+        time += foilage.time_offset;
+        let mut scaleX: f32;
+        let mut scaleY: f32;
+
+        match foilage.foilage_type {
+            FoilageType::Straw => {
+                scaleX = 1.0;
+                scaleY = 1.0;
+            }
+            FoilageType::Bush => {
+                scaleX = 1.0+(time.sin()*0.5+0.5) * SIZE_FOILAGE_DELTA;
+                scaleY = 1.0+(time.cos()*0.5+0.5) * SIZE_FOILAGE_DELTA;
+            }
+        };
+        scaleX *= screen_size.x;
+        scaleY *= screen_size.y;
+
+        let rotation = match foilage.foilage_type {
+            FoilageType::Straw => (time.sin() * 0.8) * ROTATION_FOILAGE_MAX,
+            FoilageType::Bush => 0.0,
+        };
+
+        let mut params = DrawParam::default()
+            .offset(offset)
+            .scale(na::Vector2::<f32>::new(flip_scale * scaleX / 16.0, scaleY / 16.0))
+            .rotation(rotation)
+            .dest(dest);
+        let image = sprite_collection.images.get(foilage.sprite.texture_index).expect("No image with id...");
+        graphics::draw(ctx, image, params)?;
+    }
+    Ok(())
 }
 
 fn render_system(game_state: &mut GameState, sprite_collection: &SpriteCollection, ctx: &mut Context
@@ -569,6 +657,7 @@ fn clear_map(game_state: &mut GameState) {
     game_state.grasses.clear();
     game_state.skeletons.clear();
     game_state.skeleton_blocks.clear();
+    game_state.foilages.clear();
     game_state.teleporters[0] = None;
     game_state.teleporters[1] = None;
 }
@@ -616,6 +705,15 @@ fn load_map(ctx: &mut Context, game_state: &mut GameState, map_index: usize) {
             _=> {},
         }
         x +=1;
+    }
+    // foilage time!
+    let amount = 20;
+    for grass in game_state.grasses.iter().filter(|g| g.sprite.texture_index == 1) {
+    //for i in 0..amount {
+        //let grass = game_state.grasses.get(rand::thread_rng().gen_range(0, game_state.grasses.len())).expect("no grass in map?");
+        let position = na::Point2::new(grass.transform.position.x as f32, grass.transform.position.y as f32);
+        
+        game_state.foilages.push(Foilage::new(position));
     }
 }
 
