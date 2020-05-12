@@ -29,6 +29,7 @@ const GAME_BOUNDS_Y: i32 = 7;
 const GAME_BOUNDS_X: i32 = 9;
 const SIZE_FOILAGE_DELTA: f32 = 0.2;
 const FOILAGE_SPAWN_CHANCE: f32 = 0.6;
+const FOILAGE_BUSH_CHANCE: f32 = 1.0/4.0; // 25% chance to spawn bush, otherwise straw
 const ROTATION_FOILAGE_MAX: f32 = 1.0;
 const TIME_FOILAGE_SPEED: f32 = 3.0;
 
@@ -46,9 +47,13 @@ struct Foilage {
 
 impl Foilage {
     fn new(position: na::Point2<f32>, thread_rng: &mut rand::rngs::ThreadRng) -> Self {
-        let rand_bool = thread_rng.gen::<bool>();
-        let foilage_type = if rand_bool { FoilageType::Straw } else { FoilageType::Bush };
-        let texture_index = thread_rng.gen_range(14,17+1);
+        let is_bush = thread_rng.gen::<f32>() < FOILAGE_BUSH_CHANCE;
+        let foilage_type = if is_bush { FoilageType::Bush } else { FoilageType::Straw };
+        let texture_index = match foilage_type {
+            FoilageType::Straw => thread_rng.gen_range(14,16+1),
+            FoilageType::Bush => 17,
+        };
+
         Foilage {
             position,
             sprite: SpriteComponent {
@@ -364,7 +369,6 @@ impl MainState {
         };
 
         let mut game_state = GameState::new(ctx);
-        load_map(ctx, &mut game_state, 0);
         let mut main_state = MainState{
             sprite_collection,
             sound_collection,
@@ -376,6 +380,7 @@ impl MainState {
         let (w,h) = ggez::graphics::size(ctx);
         main_state.resize_event(ctx, w, h);
         audio::maybe_create_soundmixer(ctx);
+        load_map(ctx, &mut main_state.game_state, 0, &main_state.screen_size);
         Ok(main_state)
     }
 }
@@ -396,7 +401,7 @@ impl event::EventHandler for MainState {
         }
 
         if should_step {
-            player_system(&mut self.game_state, ctx, &mut self.current_map, &mut self.sound_collection);
+            player_system(&mut self.game_state, ctx, &mut self.current_map, &mut self.sound_collection, &self.screen_size);
             skeleton_system(&mut self.game_state, ctx, &mut self.sound_collection);
             skeleton_block_system(&mut self.game_state, &mut self.sound_collection);
         }
@@ -432,7 +437,7 @@ impl event::EventHandler for MainState {
                     self.game_state.is_all_levels_completed = false;
                 }
                 clear_map(&mut self.game_state);
-                load_map(ctx, &mut self.game_state, self.current_map);
+                load_map(ctx, &mut self.game_state, self.current_map, &self.screen_size);
                 self.sound_collection.play(9);
             },
             KeyCode::M => {
@@ -662,7 +667,7 @@ fn clear_map(game_state: &mut GameState) {
     game_state.teleporters[1] = None;
 }
 
-fn load_map(ctx: &mut Context, game_state: &mut GameState, map_index: usize) {
+fn load_map(ctx: &mut Context, game_state: &mut GameState, map_index: usize, screen_size: &na::Point2::<f32>) {
     let map_filename = get_map_name(map_index);
     let mut file = ggez::filesystem::open(ctx, map_filename).expect("no map file");
     let mut buffer = String::new();
@@ -706,8 +711,11 @@ fn load_map(ctx: &mut Context, game_state: &mut GameState, map_index: usize) {
         }
         x +=1;
     }
+    // visual position starts at 0,0
+    force_visual_positions(game_state, screen_size);
+
     // foilage time!
-    let amount = 20;
+    // chance to spawn foilage on any grass block
     let mut thread_rng = rand::thread_rng();
     for grass in game_state.grasses.iter().filter(|g| g.sprite.texture_index == 1) {
         if thread_rng.gen::<f32>() > FOILAGE_SPAWN_CHANCE {
@@ -724,6 +732,28 @@ fn load_map(ctx: &mut Context, game_state: &mut GameState, map_index: usize) {
             }
             game_state.foilages.push(Foilage::new(position, &mut thread_rng));
         }
+    }
+}
+
+fn force_visual_positions(game_state: &mut GameState, screen_size: &na::Point2::<f32>) {
+    let mut position: na::Point2::<f32>;
+    for grasses in game_state.grasses.iter_mut() {
+        position = na::convert::<na::Point2::<i32>, na::Point2::<f32>>(grasses.transform.position); 
+        grasses.sprite.visual_position = position*screen_size.x;
+    }
+    for skeleton_block in game_state.skeleton_blocks.iter_mut() {
+        position = na::convert::<na::Point2::<i32>, na::Point2::<f32>>(skeleton_block.transform.position); 
+        skeleton_block.sprite.visual_position = position*screen_size.x;
+    }
+    for teleporter_option in game_state.teleporters.iter_mut() {
+        if let Some(teleporter) = teleporter_option {
+            position = na::convert::<na::Point2::<i32>, na::Point2::<f32>>(teleporter.transform.position); 
+            teleporter.sprite.visual_position = position*screen_size.x;
+        }
+    }
+    {
+        position = na::convert::<na::Point2::<i32>, na::Point2::<f32>>(game_state.exit.transform.position); 
+        game_state.exit.sprite.visual_position = position*screen_size.x;
     }
 }
 
@@ -878,7 +908,7 @@ fn in_bounds(position: &mut na::Point2::<i32>) {
 }
 
 fn player_system(game_state: &mut GameState, ctx: &mut Context
-    , current_map: &mut usize, sound_collection: &mut SoundCollection)
+    , current_map: &mut usize, sound_collection: &mut SoundCollection, screen_size: &na::Point2<f32>)
 {
     let mut should_exit = false;
     
@@ -990,28 +1020,12 @@ fn player_system(game_state: &mut GameState, ctx: &mut Context
         if *current_map >= MAP_COUNT {
             game_state.is_all_levels_completed = true;
         } else {
-            load_map(ctx, game_state, *current_map);
+            load_map(ctx, game_state, *current_map, screen_size);
         }
     }
 }
 
 fn main() -> GameResult {
-    //let resource_dir = if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
-    //    let mut path = path::PathBuf::from(manifest_dir);
-    //    path.push("resources");
-    //    path
-    //} else {
-    //    path::PathBuf::from("./resources")
-    //};
-
-    //let cb = ggez::ContextBuilder::new("Diggity2", "ggez")
-    //    .window_setup(WindowSetup::default().title("Diggity"))
-    //    .add_resource_path(resource_dir);
-
-    //let (ctx, event_loop) = &mut cb.build()?;
-    //let state = &mut MainState::new(ctx)?;
-    //event::run(ctx, event_loop, state)
-    //
     ggez::start(
         ggez::conf::Conf{
             cache: ggez::conf::Cache::Tar(include_bytes!("resources.tar").to_vec()),
