@@ -19,7 +19,7 @@ use std::collections::HashMap;
 use ggez::audio;
 
 const CLEAR_COLOR: Color = Color::new(0.0,0.0,0.0,1.0);
-const BACKGROUND_GAME: Color = Color::new(0.1,0.2,0.3,1.0);
+const BACKGROUND_GAME: Color = Color::new(56.0/255.0, 82.0/255.0, 119.0/255.0, 1.0);
 const COLOR_BLINK: Color = Color::new(2.0,2.0,2.0,1.0);
 const GAME_SCALE: f32 = 5.0;
 const TIME_BLINK: f32 = 0.4;
