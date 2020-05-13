@@ -2,7 +2,6 @@ use std::io::{Read};
 use std::f32;
 use std::path;
 use std::env;
-use rand::prelude::*;
 
 // Magic!
 use gwg as ggez;
@@ -11,6 +10,7 @@ use mint;
 use ggez::{Context, GameResult};
 use ggez::conf::*;
 use ggez::event;
+use ggez::rand;
 use ggez::graphics;
 use ggez::graphics::{Color, DrawParam, FilterMode};
 use nalgebra as na;
@@ -27,11 +27,17 @@ const TIME_AUTO_STEP: f32 = 0.2;
 const TIME_VISUAL_LERP: f32 = 1.0/0.2*2.0;
 const GAME_BOUNDS_Y: i32 = 7;
 const GAME_BOUNDS_X: i32 = 9;
+const GAME_BOUNDS_PADDING: f32 = 4.3; // Warp clouds
 const SIZE_FOILAGE_DELTA: f32 = 0.2;
 const FOILAGE_SPAWN_CHANCE: f32 = 0.6;
 const FOILAGE_BUSH_CHANCE: f32 = 1.0/4.0; // 25% chance to spawn bush, otherwise straw
 const ROTATION_FOILAGE_MAX: f32 = 1.0;
 const TIME_FOILAGE_SPEED: f32 = 3.0;
+const MAX_CLOUDS: i32 = 6;
+const MIN_CLOUDS: i32 = 2;
+const CLOUD_MIN_SPEED: f32 = 0.1;
+const CLOUD_MAX_SPEED: f32 = 0.8;
+const CLOUD_MAX_SCALE: f32 = 1.5;
 
 enum FoilageType {
     Straw, // Rotates
@@ -46,11 +52,11 @@ struct Foilage {
 }
 
 impl Foilage {
-    fn new(position: na::Point2<f32>, thread_rng: &mut rand::rngs::ThreadRng) -> Self {
-        let is_bush = thread_rng.gen::<f32>() < FOILAGE_BUSH_CHANCE;
+    fn new(position: na::Point2<f32>) -> Self {
+        let is_bush = rand::gen_range(0.0, 1.0) < FOILAGE_BUSH_CHANCE;
         let foilage_type = if is_bush { FoilageType::Bush } else { FoilageType::Straw };
         let texture_index = match foilage_type {
-            FoilageType::Straw => thread_rng.gen_range(14,16+1),
+            FoilageType::Straw => rand::gen_range(14,16+1),
             FoilageType::Bush => 17,
         };
 
@@ -59,12 +65,33 @@ impl Foilage {
             sprite: SpriteComponent {
                 texture_index,
                 scale: na::Vector2::new(1.0, 1.0),
-                is_flipped: thread_rng.gen::<bool>(),
+                is_flipped: rand::gen_range(0,2) == 0,
                 .. Default::default()
             },
             foilage_type, 
-            time_offset: rand::thread_rng().gen(),
+            time_offset: rand::gen_range(0.0, 1.0),
         }
+    }
+}
+
+struct Cloud {
+    sprite: SpriteComponent,
+    position: na::Point2::<f32>,
+    speed: f32,
+}
+
+impl Cloud {
+    fn new() -> Self {
+        let speed = rand::gen_range(CLOUD_MIN_SPEED, CLOUD_MAX_SPEED);
+        let scaleX = rand::gen_range(1.0, CLOUD_MAX_SCALE);
+        let scaleY = rand::gen_range(1.0, CLOUD_MAX_SCALE);
+        let scale = na::Vector2::new(scaleX, scaleY);
+        let texture_index = rand::gen_range(18,20+1);
+        let positionX = rand::gen_range(0.0, GAME_BOUNDS_X as f32);
+        let positionY = rand::gen_range(0.0, GAME_BOUNDS_Y as f32);
+        let position = na::Point2::new(positionX, positionY);
+        let sprite = SpriteComponent{ texture_index, scale, ..Default::default()}; 
+        Cloud{sprite, position, speed}
     }
 }
 
@@ -255,6 +282,7 @@ struct GameState {
     skeleton_blocks: Vec<SkeletonBlock>,
     skeletons: Vec<Skeleton>,
     foilages: Vec<Foilage>,
+    clouds: Vec<Cloud>,
     teleporters: [Option<Teleporter>; 2],
     exit: Exit,
     map_size: na::Point2::<f32>,
@@ -281,7 +309,7 @@ impl SoundCollection {
 }
 
 struct SpriteCollection {
-    images: [graphics::Image; 18],
+    images: [graphics::Image; 21],
 }
 
 impl SpriteCollection {
@@ -305,6 +333,7 @@ impl GameState {
             skeleton_blocks: vec![],
             skeletons: vec![],
             foilages: vec![],
+            clouds: vec![],
             teleporters: [None, None],
             exit: Exit::default(),
             is_all_levels_completed: false,
@@ -341,6 +370,9 @@ impl MainState {
             graphics::Image::new(ctx, "foilage_2.png")?,
             graphics::Image::new(ctx, "foilage_3.png")?,
             graphics::Image::new(ctx, "foilage_4.png")?,
+            graphics::Image::new(ctx, "cloud_1.png")?,
+            graphics::Image::new(ctx, "cloud_2.png")?,
+            graphics::Image::new(ctx, "cloud_3.png")?,
         ];
 
         for img in &mut images {
@@ -391,6 +423,7 @@ impl event::EventHandler for MainState {
         if self.game_state.is_all_levels_completed {
             return Ok(());
         }
+        update_clouds(&mut self.game_state, ctx);
 
         let mut should_step = false;
         {
@@ -457,6 +490,7 @@ impl event::EventHandler for MainState {
         let offsetX = (w - mapW*sprite_scale)*0.5;
         let offsetY = (h - mapH*sprite_scale)*0.5;
         ggez::graphics::set_screen_coordinates(ctx, ggez::graphics::Rect::new(-offsetX,-offsetY,w,h));
+        force_visual_positions(&mut self.game_state, &self.screen_size);
     }
 
     fn mouse_button_up_event(&mut self, ctx: &mut Context, button: ggez::event::MouseButton, x: f32, y: f32) {
@@ -503,26 +537,43 @@ fn render_sprite(sprite_collection: &SpriteCollection, ctx: &mut Context, transf
     Ok(()) 
 }
 
+fn render_clouds(game_state: &mut GameState, sprite_collection: &SpriteCollection
+    , ctx: &mut Context, screen_size: &na::Point2::<f32>) -> GameResult
+{
+    let mut params = DrawParam::default()
+        .offset(mint::Point2{x:0.0, y: 0.0});
+
+    for cloud in game_state.clouds.iter() {
+        let scale = (cloud.sprite.scale * screen_size.x) / 16.0;
+        params = params.scale(scale);
+        params = params.dest(cloud.position * screen_size.x);
+        let image = sprite_collection.images.get(cloud.sprite.texture_index).expect("No cloud image...");
+        graphics::draw(ctx, image, params)?;
+    }
+    Ok(()) 
+}
+
 fn render_game(game_state: &mut GameState, sprite_collection: &SpriteCollection, ctx: &mut Context
     , screen_size: &na::Point2::<f32>, sound_collection: &SoundCollection)
 {
-   render_sprite(sprite_collection, ctx, &game_state.exit.transform, &mut game_state.exit.sprite, screen_size);
-   for grass in &mut game_state.grasses{
-        render_sprite(sprite_collection, ctx, &grass.transform, &mut grass.sprite, screen_size);
-   }
-   for skeleton_block in &mut game_state.skeleton_blocks {
-        render_sprite(sprite_collection, ctx, &skeleton_block.transform, &mut skeleton_block.sprite, screen_size);
-   }
-   for teleporter_option in game_state.teleporters.iter_mut().map(|t| t.as_mut()) {
-       if let Some(teleporter) = teleporter_option {
-            render_sprite(sprite_collection, ctx, &teleporter.transform, &mut teleporter.sprite, screen_size);
-        }
-   }
-   for skeleton in game_state.skeletons.iter_mut() {
-        render_sprite(sprite_collection, ctx, &skeleton.transform, &mut skeleton.sprite, screen_size);
-   }
-   render_sprite(sprite_collection, ctx, &game_state.player.transform, &mut game_state.player.sprite, screen_size);
-   render_foilage(game_state, sprite_collection, ctx, screen_size);
+    render_clouds(game_state, sprite_collection, ctx, screen_size);
+    render_sprite(sprite_collection, ctx, &game_state.exit.transform, &mut game_state.exit.sprite, screen_size);
+    for grass in &mut game_state.grasses{
+         render_sprite(sprite_collection, ctx, &grass.transform, &mut grass.sprite, screen_size);
+    }
+    for skeleton_block in &mut game_state.skeleton_blocks {
+         render_sprite(sprite_collection, ctx, &skeleton_block.transform, &mut skeleton_block.sprite, screen_size);
+    }
+    for teleporter_option in game_state.teleporters.iter_mut().map(|t| t.as_mut()) {
+        if let Some(teleporter) = teleporter_option {
+             render_sprite(sprite_collection, ctx, &teleporter.transform, &mut teleporter.sprite, screen_size);
+         }
+    }
+    for skeleton in game_state.skeletons.iter_mut() {
+         render_sprite(sprite_collection, ctx, &skeleton.transform, &mut skeleton.sprite, screen_size);
+    }
+    render_sprite(sprite_collection, ctx, &game_state.player.transform, &mut game_state.player.sprite, screen_size);
+    render_foilage(game_state, sprite_collection, ctx, screen_size);
 }
 
 fn render_foilage(game_state: &mut GameState, sprite_collection: &SpriteCollection
@@ -663,6 +714,7 @@ fn clear_map(game_state: &mut GameState) {
     game_state.skeletons.clear();
     game_state.skeleton_blocks.clear();
     game_state.foilages.clear();
+    game_state.clouds.clear();
     game_state.teleporters[0] = None;
     game_state.teleporters[1] = None;
 }
@@ -716,13 +768,14 @@ fn load_map(ctx: &mut Context, game_state: &mut GameState, map_index: usize, scr
 
     // foilage time!
     // chance to spawn foilage on any grass block
-    let mut thread_rng = rand::thread_rng();
     for grass in game_state.grasses.iter().filter(|g| g.sprite.texture_index == 1) {
-        if thread_rng.gen::<f32>() > FOILAGE_SPAWN_CHANCE {
+        if rand::gen_range(0.0,1.0) > FOILAGE_SPAWN_CHANCE {
             continue;
         }
-        let foilage_count = thread_rng.gen_range(1,2+1);
-        let mut position = na::Point2::new(grass.transform.position.x as f32, grass.transform.position.y as f32);
+        let foilage_count = rand::gen_range(1,2+1);
+        let mut position = na::Point2::new(grass.transform.position.x as f32
+            , grass.transform.position.y as f32);
+
         for _i in 0..foilage_count {
             // Put in middle of block
             if foilage_count == 0 {
@@ -730,7 +783,26 @@ fn load_map(ctx: &mut Context, game_state: &mut GameState, map_index: usize, scr
             } else {
                 position.x += 0.33;
             }
-            game_state.foilages.push(Foilage::new(position, &mut thread_rng));
+            game_state.foilages.push(Foilage::new(position));
+        }
+    }
+    // Clouds generation
+    spawn_clouds(game_state);
+}
+
+fn spawn_clouds(game_state: &mut GameState) {
+    let amount = rand::gen_range(MIN_CLOUDS, MAX_CLOUDS+1);
+    for _i in 0..amount {
+        game_state.clouds.push(Cloud::new());
+    }
+}
+
+fn update_clouds(game_state: &mut GameState, ctx: &mut Context) {
+    let delta = ggez::timer::delta(ctx).as_secs_f32();
+    for cloud in game_state.clouds.iter_mut() {
+        cloud.position.x += delta * cloud.speed;
+        if cloud.position.x > GAME_BOUNDS_X as f32 + GAME_BOUNDS_PADDING {
+            cloud.position.x = -GAME_BOUNDS_PADDING;
         }
     }
 }
