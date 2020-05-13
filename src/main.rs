@@ -27,17 +27,17 @@ const TIME_AUTO_STEP: f32 = 0.2;
 const TIME_VISUAL_LERP: f32 = 1.0/0.2*2.0;
 const GAME_BOUNDS_Y: i32 = 7;
 const GAME_BOUNDS_X: i32 = 9;
-const GAME_BOUNDS_PADDING: f32 = 4.3; // Warp clouds
+const GAME_BOUNDS_PADDING: f32 = 5.0; // Warp clouds
 const SIZE_FOILAGE_DELTA: f32 = 0.2;
 const FOILAGE_SPAWN_CHANCE: f32 = 0.6;
 const FOILAGE_BUSH_CHANCE: f32 = 1.0/4.0; // 25% chance to spawn bush, otherwise straw
 const ROTATION_FOILAGE_MAX: f32 = 1.0;
 const TIME_FOILAGE_SPEED: f32 = 3.0;
-const MAX_CLOUDS: i32 = 6;
+const MAX_CLOUDS: i32 = 8;
 const MIN_CLOUDS: i32 = 2;
 const CLOUD_MIN_SPEED: f32 = 0.1;
-const CLOUD_MAX_SPEED: f32 = 0.8;
-const CLOUD_MAX_SCALE: f32 = 1.5;
+const CLOUD_MAX_SPEED: f32 = 0.6;
+const CLOUD_MAX_SCALE: f32 = 2.0;
 
 enum FoilageType {
     Straw, // Rotates
@@ -87,7 +87,7 @@ impl Cloud {
         let scaleY = rand::gen_range(1.0, CLOUD_MAX_SCALE);
         let scale = na::Vector2::new(scaleX, scaleY);
         let texture_index = rand::gen_range(18,20+1);
-        let positionX = rand::gen_range(0.0, GAME_BOUNDS_X as f32);
+        let positionX = rand::gen_range(-GAME_BOUNDS_PADDING, GAME_BOUNDS_X as f32 + GAME_BOUNDS_PADDING);
         let positionY = rand::gen_range(0.0, GAME_BOUNDS_Y as f32);
         let position = na::Point2::new(positionX, positionY);
         let sprite = SpriteComponent{ texture_index, scale, ..Default::default()}; 
@@ -276,6 +276,20 @@ struct BuriedComponent {
     is_released: bool,
 }
 
+struct BlackBorder {
+    mesh: graphics::Mesh,
+    draw_param: graphics::DrawParam,
+}
+
+// todo: move
+fn render_border(ctx: &mut Context, border: &Option<BlackBorder>) -> GameResult{
+    match border {
+        Some(b) => graphics::draw(ctx, &b.mesh, b.draw_param)?,
+        None => {},
+    }
+    Ok(())
+}
+
 struct GameState {
     player: Player,
     grasses: Vec<Grass>,
@@ -347,6 +361,8 @@ struct MainState {
     sound_collection: SoundCollection,
     current_map: usize,
     screen_size: na::Point2::<f32>,
+    black_border_left: Option<BlackBorder>,
+    black_border_right: Option<BlackBorder>,
 }
 
 impl MainState {
@@ -407,11 +423,15 @@ impl MainState {
             game_state,
             current_map: 0,
             screen_size : na::Point2::new(0.0, 0.0),
+            black_border_left: None,
+            black_border_right: None,
         };
+
         use ggez::event::EventHandler;
         let (w,h) = ggez::graphics::size(ctx);
         main_state.resize_event(ctx, w, h);
         audio::maybe_create_soundmixer(ctx);
+
         load_map(ctx, &mut main_state.game_state, 0, &main_state.screen_size);
         Ok(main_state)
     }
@@ -443,7 +463,9 @@ impl event::EventHandler for MainState {
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         graphics::clear(ctx, CLEAR_COLOR);
-        render_system(&mut self.game_state, &self.sprite_collection, ctx, &self.screen_size, &self.sound_collection);
+        render_system(&mut self.game_state, &self.sprite_collection
+            , ctx, &self.screen_size, &self.sound_collection
+            , &self.black_border_left, & self.black_border_right);
 
         graphics::present(ctx)?;
         Ok(())
@@ -491,6 +513,14 @@ impl event::EventHandler for MainState {
         let offsetY = (h - mapH*sprite_scale)*0.5;
         ggez::graphics::set_screen_coordinates(ctx, ggez::graphics::Rect::new(-offsetX,-offsetY,w,h));
         force_visual_positions(&mut self.game_state, &self.screen_size);
+
+        let border_width = (w - (mapW*sprite_scale))*0.5;
+        let border_height = h;
+        let border_y = 0.0;
+        let left_pos = -border_width;
+        let right_pos = w-border_width*2.0;
+        update_borders(ctx, &mut self.black_border_left, &mut self.black_border_right
+            ,border_width, border_height, left_pos, right_pos, border_y);
     }
 
     fn mouse_button_up_event(&mut self, ctx: &mut Context, button: ggez::event::MouseButton, x: f32, y: f32) {
@@ -499,6 +529,25 @@ impl event::EventHandler for MainState {
         if volume_rect.contains(na::Point2::new(x, y)) {
             self.sound_collection.is_on = !self.sound_collection.is_on; 
         }
+    }
+}
+
+fn update_borders(ctx: &mut Context, left: &mut Option<BlackBorder>, right: &mut Option<BlackBorder>
+    , w: f32, h: f32, left_x:f32, right_x: f32, border_y: f32)
+{
+    let left_rect = graphics::Rect::new(left_x, border_y, w, h);
+    let right_rect = graphics::Rect::new(right_x, border_y, w, h);
+    let left_mesh_result = graphics::Mesh::new_rectangle(ctx, graphics::DrawMode::fill()
+        , left_rect, CLEAR_COLOR);
+
+    let right_mesh_result = graphics::Mesh::new_rectangle(ctx, graphics::DrawMode::fill()
+        , right_rect, CLEAR_COLOR);
+
+    if let Ok(left_mesh) = left_mesh_result {
+        *left = Some(BlackBorder{ mesh: left_mesh, draw_param: DrawParam::default()});
+    }
+    if let Ok(right_mesh) = right_mesh_result {
+        *right = Some(BlackBorder{ mesh: right_mesh, draw_param: DrawParam::default()});
     }
 }
 
@@ -622,15 +671,19 @@ fn render_foilage(game_state: &mut GameState, sprite_collection: &SpriteCollecti
 }
 
 fn render_system(game_state: &mut GameState, sprite_collection: &SpriteCollection, ctx: &mut Context
-    , screen_size: &na::Point2::<f32>, sound_collection: &SoundCollection)
+    , screen_size: &na::Point2::<f32>, sound_collection: &SoundCollection
+    , left_border: &Option<BlackBorder>, right_border: &Option<BlackBorder>)
 {
    render_background(ctx, screen_size);
+
    if game_state.is_all_levels_completed {
        render_all_levels_completed(game_state, ctx, screen_size);
    } else {
         render_game(game_state, sprite_collection, ctx, screen_size, sound_collection);
         render_game_over(game_state, ctx, screen_size);
    }
+   render_border(ctx, left_border);
+   render_border(ctx, right_border);
    render_sound_button(ctx, sprite_collection, sound_collection);
 }
 
