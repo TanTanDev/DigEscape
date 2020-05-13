@@ -1,6 +1,8 @@
 # Dig Escape
 Dig Escape is a simple puzzle game written in [Rust](https://www.rust-lang.org/)
 
+The game is playable here: https://tantandev.itch.io/digescape
+
 ### Background
 What started out as a small project with the goal of learning [Rust](https://www.rust-lang.org/)
 , ended up being released playable on the [web!](https://tantandev.itch.io/digescape)
