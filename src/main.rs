@@ -1,3 +1,5 @@
+mod particle_system;
+
 use std::io::{Read};
 use std::f32;
 use std::path;
