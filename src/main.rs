@@ -1,4 +1,5 @@
 mod particle_system;
+use particle_system::{ParticleSystem};
 
 use std::io::{Read};
 use std::f32;
@@ -365,6 +366,7 @@ struct MainState {
     screen_size: na::Point2::<f32>,
     black_border_left: Option<BlackBorder>,
     black_border_right: Option<BlackBorder>,
+    test_particle: ParticleSystem,
 }
 
 impl MainState {
@@ -427,7 +429,9 @@ impl MainState {
             screen_size : na::Point2::new(0.0, 0.0),
             black_border_left: None,
             black_border_right: None,
+            test_particle: ParticleSystem::new(ctx),
         };
+        //main_state.test_particle.emit(50);
 
         use ggez::event::EventHandler;
         let (w,h) = ggez::graphics::size(ctx);
@@ -445,6 +449,8 @@ impl event::EventHandler for MainState {
         if self.game_state.is_all_levels_completed {
             return Ok(());
         }
+
+        self.test_particle.update(delta);
         update_clouds(&mut self.game_state, ctx);
 
         let mut should_step = false;
@@ -468,6 +474,7 @@ impl event::EventHandler for MainState {
         render_system(&mut self.game_state, &self.sprite_collection
             , ctx, &self.screen_size, &self.sound_collection
             , &self.black_border_left, & self.black_border_right);
+        self.test_particle.draw(ctx);
 
         graphics::present(ctx)?;
         Ok(())
@@ -486,6 +493,10 @@ impl event::EventHandler for MainState {
             KeyCode::Up | KeyCode::W=> PlayerInputIntent::Up, 
             _ => PlayerInputIntent::None,
         };
+        if let KeyCode::Space = keycode {
+
+        self.test_particle.emit(50);
+        }
         self.game_state.player.input_intent = intent;
         match keycode {
             KeyCode::R => {
