@@ -1,5 +1,5 @@
 mod particle_system;
-use particle_system::{ParticleSystem};
+use particle_system::{ParticleSystem, ValueGetter};
 
 use std::io::{Read};
 use std::f32;
@@ -431,8 +431,6 @@ impl MainState {
             black_border_right: None,
             test_particle: ParticleSystem::new(ctx),
         };
-        //main_state.test_particle.emit(50);
-
         use ggez::event::EventHandler;
         let (w,h) = ggez::graphics::size(ctx);
         main_state.resize_event(ctx, w, h);
@@ -495,7 +493,7 @@ impl event::EventHandler for MainState {
         };
         if let KeyCode::Space = keycode {
 
-        self.test_particle.emit(50);
+            self.test_particle.emit(10);
         }
         self.game_state.player.input_intent = intent;
         match keycode {

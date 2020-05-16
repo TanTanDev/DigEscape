@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::collections::HashMap;
 
 use nalgebra as na;
 use gwg::rand;
@@ -8,17 +9,24 @@ use ggez::graphics::spritebatch::{SpriteBatch};
 use ggez::graphics::{DrawParam};
 use ggez::{GameResult};
 
-static DEFAULT_CAPACITY: usize = 256;
+static DEFAULT_CAPACITY: usize = 1;
 static PI: f32 = std::f32::consts::PI;
 static TAU: f32 = PI*2.0;
 
 use na::Vector2 as Vector2;
 use na::Point2 as Point2;
 
+// Todo, since start_lifetime can be randomized, the scaling will not start at start_scale
+// because the lifetime fraction also then is randomized
+
 // helper funcitons
 // in radians
 fn vec_from_angle(angle: f32) -> na::Vector2<f32> {
     na::Vector2::new(angle.sin(), angle.cos())
+}
+
+fn lerp(from: f32, to: f32, delta: f32) -> f32 {
+    (1.0-delta) * from + delta * to
 }
 
 pub struct ParticleSystem {
@@ -38,13 +46,14 @@ pub struct ParticleSystem {
     velocity_type: VelocityType,
     gravity: f32,
 
-    start_lifetime: ValueGetter,
-    start_speed: ValueGetter,
-    start_rotation: ValueGetter,
-    start_scale: ValueGetter,
-    start_angular_velocity: ValueGetter,
-    start_color: ggez::graphics::Color,
-    end_scale: f32,
+    pub position: Vector2<f32>,
+    pub start_lifetime: ValueGetter<f32>,
+    pub start_speed: ValueGetter<f32>,
+    pub start_rotation: ValueGetter<f32>,
+    pub start_scale: ValueGetter<f32>,
+    pub start_angular_velocity: ValueGetter<f32>,
+    pub start_color: ValueGetter<ggez::graphics::Color>,
+    pub end_scale: f32,
 
     sprite_batch_dirty: bool,
     sprite_batch: SpriteBatch,
@@ -81,12 +90,15 @@ impl ParticleSystem {
             velocity_type: VelocityType::Angle(AngleData::new(PI, Some(0.5))),
             gravity: -9.0,
 
-            start_lifetime: ValueGetter::Single(3.0),
+            position: Vector2::new(200.0, 300.0),
+            start_lifetime: ValueGetter::Single(1.4),
             start_speed: ValueGetter::Range(0.0, 3.0),
             start_rotation: ValueGetter::Single(0.0),
             start_scale: ValueGetter::Single(16.0),
-            start_angular_velocity: ValueGetter::Range(-20.0, 20.0),
-            start_color: ggez::graphics::Color::new(0.5,0.2, 0.2, 1.0),
+            start_angular_velocity: ValueGetter::Range(-1.0, 1.0),
+            start_color: ValueGetter::Range(ggez::graphics::Color::new(0.5,0.2, 0.2, 1.0)
+                , ggez::graphics::Color::new(1.0,1.0, 0.2, 1.0)),
+
             end_scale: 0.0,
 
             sprite_batch_dirty: true,
@@ -115,7 +127,7 @@ impl ParticleSystem {
             let scale = self.scales[*i];
             let drawparam = DrawParam {
                 offset: Point2::new(0.5, 0.5).into(),
-                dest: (self.positions[*i]+Vector2::new(100.0, 100.0)).into(),
+                dest: (self.positions[*i]+self.position).into(),
                 scale: mint::Vector2 {x: scale, y: scale},
                 rotation: self.rotations[*i],
                 color: self.colors[*i],
@@ -138,6 +150,7 @@ impl ParticleSystem {
         // remove particles with lifetime less than 0
         // to those, removed, add that index to available_indexes
         particle_indexes.retain(|i| {
+            lifetimes[*i] -= dt;
             if lifetimes[*i] < 0.0 {
                 available_indexes.push_back(*i); 
                 return false;
@@ -149,12 +162,16 @@ impl ParticleSystem {
             self.velocities[*i].y -= self.gravity * dt;
             self.positions[*i] += self.velocities[*i];
             self.rotations[*i] += self.angular_velocities[*i] * dt;
+            let normalized_life = (self.start_lifetime.get() - lifetimes[*i])/self.start_lifetime.get();
+            self.scales[*i] = lerp(self.start_scale.get(), self.end_scale, normalized_life);
         }
         self.sprite_batch_dirty = true;
     }
 
     pub fn emit(&mut self, amount: i32) {
         for i in 0..amount {
+            for i in self.available_indexes.iter() {
+            }
             let index_option = self.available_indexes.pop_front(); 
             match index_option {
                 Some(index) => {
@@ -163,7 +180,7 @@ impl ParticleSystem {
                 },
                 None => {
                     // Resize vectors and spawn a new particle
-                    let left_to_create = amount - 1;
+                    let left_to_create = amount - i;
                     let available_index = self.grow(left_to_create as usize);
                     self.particle_setup(available_index);
                 }
@@ -180,19 +197,24 @@ impl ParticleSystem {
         self.scales.reserve(additional);
         self.angular_velocities.reserve(additional);
         self.particle_indexes.reserve(additional);
+        self.available_indexes.reserve(additional);
         self.colors.reserve(additional);
+        println!("recice lifetime len: {}", self.lifetimes.len());
+
+
+        let next_available_index = self.lifetimes.len();
 
         for i in self.positions.len()..self.positions.capacity() { self.positions.push(Point2::new(0.0,0.0)); }
         for i in self.velocities.len()..self.velocities.capacity() { self.velocities.push(Vector2::new(0.0,0.0)); }
         for i in self.scales.len()..self.scales.capacity() { self.scales.push(0.0); }
-        for i in self.lifetimes.len()..self.lifetimes.capacity() { self.lifetimes.push(0.0); }
+        for i in self.lifetimes.len()..self.lifetimes.capacity()  { self.lifetimes.push(0.0); }
         for i in self.rotations.len()..self.rotations.capacity() { self.rotations.push(0.0); }
         for i in self.angular_velocities.len()..self.angular_velocities.capacity() { self.angular_velocities.push(0.0); }
         for i in self.colors.len()..self.colors.capacity() { self.colors.push(ggez::graphics::WHITE); }
 
-        let next_available_index = self.lifetimes.len();
+        let newly_added = self.lifetimes.len() - next_available_index;
         // Skip adding first, because we'll use that index when we return
-        for i in 1..additional {
+        for i in 0..newly_added {
             self.available_indexes.push_back(next_available_index + i);
         }
         next_available_index
@@ -209,7 +231,7 @@ impl ParticleSystem {
         let direction = self.emit_shape.get_direction(&self.velocity_type, &pos);
         let velocity = direction * speed;
         let lifetime = self.start_lifetime.get();
-        let color = self.start_color;
+        let color = self.start_color.get();
 
         self.lifetimes[index] = lifetime;
         self.positions[index] = pos;
@@ -321,22 +343,70 @@ impl EmitShape {
     }
 }
 
-enum ValueGetter {
-    Single(f32),
-    Range(f32, f32),
+pub enum ValueGetter<T> {
+    Single(T),
+    Range(T, T),
 }
 
 // Todo: Implement range, randomization
-impl ValueGetter {
+impl ValueGetter<ggez::graphics::Color> {
+    pub fn get(&self) -> ggez::graphics::Color {
+        match *self {
+            ValueGetter::Single(v) => v,
+            ValueGetter::Range(v1, v2) => {
+                let (low_r, low_g, low_b) = v1.into();
+                let (high_r, high_g, high_b) = v2.into();
+                // gen_range doesn't support u8 in good-web-easy
+                let r = rand::gen_range(low_r as i32, high_r as i32) as u8;
+                let g = rand::gen_range(low_g as i32, high_g as i32) as u8;
+                let b = rand::gen_range(low_b as i32, high_b as i32) as u8;
+                (r,g,b).into()
+            },
+        }
+    }
+}
+
+impl ValueGetter<f32> {
     pub fn get(&self) -> f32 {
-        match self {
-            ValueGetter::Single(v) => *v,
-            ValueGetter::Range(v1, v2) => rand::gen_range(*v1, *v2),
+        match *self {
+            ValueGetter::Single(v) => v,
+            ValueGetter::Range(v1, v2) => rand::gen_range(v1, v2),
         }
     }
 }
 
 // Manage multiple systems
 struct ParticleSystemCollection {
-    particle_systems: Vec<ParticleSystem>,
+    particle_systems: HashMap<u32, ParticleSystem>,
+    last_identifier: u32,
+}
+
+impl ParticleSystemCollection {
+    pub fn new() -> Self {
+        ParticleSystemCollection {
+            particle_systems: HashMap::new(), 
+            last_identifier: 0,
+        }
+    }
+
+    pub fn update(&mut self, delta: f32) {
+        for (_identifier, system) in self.particle_systems.iter_mut() {
+            system.update(delta);
+        }
+    }
+
+    pub fn add_system(&mut self, system: ParticleSystem) -> u32 {
+        self.last_identifier += 1;
+        self.particle_systems.insert(self.last_identifier, system);
+        self.last_identifier
+    }
+
+    // returns if system is still valid
+    pub fn emit(&mut self, system_identifier: u32, amount: i32) -> bool {
+        if let Some(system) = self.particle_systems.get_mut(&system_identifier) {
+            system.emit(amount);
+            return true;
+        }
+        false
+    }
 }
