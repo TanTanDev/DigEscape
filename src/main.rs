@@ -1,5 +1,5 @@
 mod particle_system;
-use particle_system::{ParticleSystem, ValueGetter};
+use particle_system::{ParticleSystem, ValueGetter, VelocityType, AngleData, ParticleSystemCollection};
 
 use std::io::{Read};
 use std::f32;
@@ -41,6 +41,7 @@ const MIN_CLOUDS: i32 = 2;
 const CLOUD_MIN_SPEED: f32 = 0.1;
 const CLOUD_MAX_SPEED: f32 = 0.6;
 const CLOUD_MAX_SCALE: f32 = 2.0;
+const PI: f32 = std::f32::consts::PI;
 
 enum FoilageType {
     Straw, // Rotates
@@ -366,7 +367,10 @@ struct MainState {
     screen_size: na::Point2::<f32>,
     black_border_left: Option<BlackBorder>,
     black_border_right: Option<BlackBorder>,
-    test_particle: ParticleSystem,
+    //test_particle: ParticleSystem,
+    particle_systems: ParticleSystemCollection,
+    grass_id: u32,
+    step_id: u32,
 }
 
 impl MainState {
@@ -419,6 +423,26 @@ impl MainState {
             is_on: true,
             sounds,
         };
+        let mut particle_systems = ParticleSystemCollection::new();
+        let mut grass_particle_system = ParticleSystem::new(ctx);
+        grass_particle_system.start_color = ValueGetter::Range(
+            (82.0/255.0,166.0/255.0,32.0/255.0).into()
+            , (66.0/255.0, 54.0/255.0,39.0/255.0).into());
+
+        grass_particle_system.velocity_type = VelocityType::Angle(AngleData::new(PI, Some(0.4)));
+        grass_particle_system.start_speed = ValueGetter::Range(2.0,3.0);
+        grass_particle_system.start_lifetime = ValueGetter::Range(0.4, 0.5);
+        grass_particle_system.start_scale = ValueGetter::Range(2.0, 3.4);
+        grass_particle_system.start_angular_velocity = ValueGetter::Range(2.0, 30.4);
+
+        let mut step_particle_system = ParticleSystem::new(ctx);
+        step_particle_system.start_lifetime = ValueGetter::Range(0.2, 0.3);
+        step_particle_system.start_scale = ValueGetter::Range(1.0, 2.4);
+        step_particle_system.start_color = ValueGetter::Single((82.0/255.0,166.0/255.0,32.0/255.0).into());
+        //step_particle_system.gravity = 0.0;
+
+        let grass_id = particle_systems.add_system(grass_particle_system);
+        let step_id = particle_systems.add_system(step_particle_system);
 
         let mut game_state = GameState::new(ctx);
         let mut main_state = MainState{
@@ -429,8 +453,11 @@ impl MainState {
             screen_size : na::Point2::new(0.0, 0.0),
             black_border_left: None,
             black_border_right: None,
-            test_particle: ParticleSystem::new(ctx),
+            particle_systems,
+            grass_id,
+            step_id,
         };
+
         use ggez::event::EventHandler;
         let (w,h) = ggez::graphics::size(ctx);
         main_state.resize_event(ctx, w, h);
@@ -447,8 +474,8 @@ impl event::EventHandler for MainState {
         if self.game_state.is_all_levels_completed {
             return Ok(());
         }
+        self.particle_systems.update(delta);
 
-        self.test_particle.update(delta);
         update_clouds(&mut self.game_state, ctx);
 
         let mut should_step = false;
@@ -460,7 +487,11 @@ impl event::EventHandler for MainState {
         }
 
         if should_step {
-            player_system(&mut self.game_state, ctx, &mut self.current_map, &mut self.sound_collection, &self.screen_size);
+            player_system(&mut self.game_state, ctx, &mut self.current_map
+                , &mut self.sound_collection, &self.screen_size
+                , &mut self.particle_systems, &self.grass_id
+                , &self.step_id);
+
             skeleton_system(&mut self.game_state, ctx, &mut self.sound_collection);
             skeleton_block_system(&mut self.game_state, &mut self.sound_collection);
         }
@@ -472,8 +503,7 @@ impl event::EventHandler for MainState {
         render_system(&mut self.game_state, &self.sprite_collection
             , ctx, &self.screen_size, &self.sound_collection
             , &self.black_border_left, & self.black_border_right);
-        self.test_particle.draw(ctx);
-
+        self.particle_systems.draw(ctx);
         graphics::present(ctx)?;
         Ok(())
     }
@@ -486,14 +516,12 @@ impl event::EventHandler for MainState {
 
         let intent = match keycode {
             KeyCode::Right | KeyCode::D => PlayerInputIntent::Right, 
-            KeyCode::Left | KeyCode::A=> PlayerInputIntent::Left,
-            KeyCode::Down | KeyCode::S=> PlayerInputIntent::Down, 
-            KeyCode::Up | KeyCode::W=> PlayerInputIntent::Up, 
+            KeyCode::Left | KeyCode::A => PlayerInputIntent::Left,
+            KeyCode::Down | KeyCode::S => PlayerInputIntent::Down, 
+            KeyCode::Up | KeyCode::W => PlayerInputIntent::Up, 
             _ => PlayerInputIntent::None,
         };
         if let KeyCode::Space = keycode {
-
-            self.test_particle.emit(10);
         }
         self.game_state.player.input_intent = intent;
         match keycode {
@@ -1043,8 +1071,31 @@ fn in_bounds(position: &mut na::Point2::<i32>) {
     if position.y > GAME_BOUNDS_Y {position.y = 0}
 }
 
+fn emit_step_particle(particle_collection: &mut ParticleSystemCollection, step_id: &u32
+    , amount: i32, is_right_dir: bool, player: &Player, screen_size: &na::Point2<f32>)
+{
+    let step_particle = particle_collection.get_mut(*step_id).unwrap();
+    let mut pos_particle = na::Vector2::new(
+        player.sprite.visual_position.x/screen_size.x*16.0
+        , player.sprite.visual_position.y/screen_size.x*16.0);
+
+    if is_right_dir {
+        step_particle.velocity_type = VelocityType::Angle(AngleData::new(-PI*0.8, Some(0.2)));
+    } else {
+        step_particle.velocity_type = VelocityType::Angle(AngleData::new(PI*0.8, Some(0.2)));
+    }
+    step_particle.scale = screen_size.x/16.0;
+    // offset to under player
+    pos_particle.x += 16.0*0.5;
+    pos_particle.y += 16.0;
+    step_particle.position = pos_particle;
+
+    step_particle.emit(amount);
+}
+
 fn player_system(game_state: &mut GameState, ctx: &mut Context
-    , current_map: &mut usize, sound_collection: &mut SoundCollection, screen_size: &na::Point2<f32>)
+    , current_map: &mut usize, sound_collection: &mut SoundCollection, screen_size: &na::Point2<f32>
+    , particle_collection: &mut ParticleSystemCollection, grass_id: &u32, step_id: &u32)
 {
     let mut should_exit = false;
     
@@ -1081,6 +1132,8 @@ fn player_system(game_state: &mut GameState, ctx: &mut Context
             if !is_occupied {
                 player.transform.position = new_position;
                 sound_collection.play(0);
+
+                emit_step_particle(particle_collection, step_id, 8, false, player, screen_size);
             }
         },
         PlayerInputIntent::Right => {
@@ -1093,6 +1146,7 @@ fn player_system(game_state: &mut GameState, ctx: &mut Context
             if !is_occupied {
                 player.transform.position = new_position;
                 sound_collection.play(0);
+                emit_step_particle(particle_collection, step_id, 8, true, player, screen_size);
             }
         },
         PlayerInputIntent::Up => {
@@ -1107,10 +1161,12 @@ fn player_system(game_state: &mut GameState, ctx: &mut Context
                 });
             if let Some((index, teleporter)) = teleporter_tuple_option {
                 let other_teleporter_index = 1-index;
-                let other_teleporter_option = game_state.teleporters.get(other_teleporter_index).unwrap();
+                let other_teleporter_option = game_state.teleporters.get_mut(other_teleporter_index).unwrap();
                 if let Some(other_teleporter) = other_teleporter_option {
                     player.transform.position = other_teleporter.transform.position;
                     sound_collection.play(3);
+                    player.sprite.blink_timer = TIME_BLINK;
+                    other_teleporter.sprite.blink_timer = TIME_BLINK;
                 }
             }
             // Exit
@@ -1134,6 +1190,19 @@ fn player_system(game_state: &mut GameState, ctx: &mut Context
             if let Some(skeleton_block) = skeleton_block_option {
                 skeleton_block.dig();
             }
+
+            let grass_particle_system = particle_collection.get_mut(*grass_id).unwrap();
+            let mut pos_particle = na::Vector2::new(
+                player.sprite.visual_position.x/screen_size.x*16.0
+                , player.sprite.visual_position.y/screen_size.x*16.0);
+
+            grass_particle_system.scale = screen_size.x/16.0;
+            // offset to under player
+            pos_particle.x += 16.0*0.5;
+            pos_particle.y += 16.0;
+            grass_particle_system.position = pos_particle;
+            grass_particle_system.emit(20);
+
             sound_collection.play(1);
             player.sprite.texture_index = 8;
         },

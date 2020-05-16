@@ -29,6 +29,11 @@ fn lerp(from: f32, to: f32, delta: f32) -> f32 {
     (1.0-delta) * from + delta * to
 }
 
+pub enum TransformSpace {
+    Local,
+    World,
+}
+
 pub struct ParticleSystem {
     // Particle data
     positions: Vec<Point2::<f32>>,
@@ -42,10 +47,12 @@ pub struct ParticleSystem {
     available_indexes: VecDeque<usize>,
 
     // System data
-    emit_shape: EmitShape,
-    velocity_type: VelocityType,
-    gravity: f32,
+    pub emit_shape: EmitShape,
+    pub velocity_type: VelocityType,
+    pub gravity: f32,
+    pub transform_space: TransformSpace,
 
+    pub scale: f32,
     pub position: Vector2<f32>,
     pub start_lifetime: ValueGetter<f32>,
     pub start_speed: ValueGetter<f32>,
@@ -89,7 +96,9 @@ impl ParticleSystem {
             emit_shape: EmitShape::Point,
             velocity_type: VelocityType::Angle(AngleData::new(PI, Some(0.5))),
             gravity: -9.0,
+            transform_space: TransformSpace::World,
 
+            scale: 1.0,
             position: Vector2::new(200.0, 300.0),
             start_lifetime: ValueGetter::Single(1.4),
             start_speed: ValueGetter::Range(0.0, 3.0),
@@ -125,10 +134,15 @@ impl ParticleSystem {
         self.sprite_batch.clear();
         for i in self.particle_indexes.iter() {
             let scale = self.scales[*i];
+            let mut dest = self.positions[*i];
+            if let TransformSpace::Local = self.transform_space {
+                dest += self.position;
+            }
+
             let drawparam = DrawParam {
                 offset: Point2::new(0.5, 0.5).into(),
-                dest: (self.positions[*i]+self.position).into(),
-                scale: mint::Vector2 {x: scale, y: scale},
+                dest: (dest*self.scale).into(),
+                scale: mint::Vector2 {x: scale*self.scale , y: scale*self.scale },
                 rotation: self.rotations[*i],
                 color: self.colors[*i],
                 .. Default::default()
@@ -162,8 +176,8 @@ impl ParticleSystem {
             self.velocities[*i].y -= self.gravity * dt;
             self.positions[*i] += self.velocities[*i];
             self.rotations[*i] += self.angular_velocities[*i] * dt;
-            let normalized_life = (self.start_lifetime.get() - lifetimes[*i])/self.start_lifetime.get();
-            self.scales[*i] = lerp(self.start_scale.get(), self.end_scale, normalized_life);
+            let normalized_life = (self.start_lifetime.max() - lifetimes[*i])/self.start_lifetime.max();
+            self.scales[*i] = lerp(self.start_scale.max(), self.end_scale, normalized_life);
         }
         self.sprite_batch_dirty = true;
     }
@@ -223,7 +237,10 @@ impl ParticleSystem {
     // Setup the data for a newly created particle
     // index is assumed to be in bounds
     fn particle_setup(&mut self, index: usize) {
-        let pos = self.emit_shape.get_position();
+        let mut pos = self.emit_shape.get_position();
+        if let TransformSpace::World = self.transform_space {
+            pos += self.position;
+        }
         let rotation = self.start_rotation.get();
         let angular_velocity = self.start_angular_velocity.get();
         let scale = self.start_scale.get();
@@ -244,7 +261,7 @@ impl ParticleSystem {
     }
 }
 
-enum EmitShape {
+pub enum EmitShape {
     Point, // The position of the particle system
     //Line(Vector2<f32>),
     //Rect(RectData),
@@ -274,7 +291,7 @@ enum SpawnType {
 }
 
 // decides how velocity should be calculated
-enum VelocityType {
+pub enum VelocityType {
     //AlignToDirection(AlignToDirectionData), 
     Angle(AngleData),
     Random, 
@@ -284,7 +301,7 @@ struct AlignToDirectionData {
     max_delta: Option<f32>,
 }
 
-struct AngleData {
+pub struct AngleData {
     angle: f32,
     max_delta: Option<f32>,
 }
@@ -373,10 +390,16 @@ impl ValueGetter<f32> {
             ValueGetter::Range(v1, v2) => rand::gen_range(v1, v2),
         }
     }
+    pub fn max(&self) -> f32 {
+        match *self {
+            ValueGetter::Single(v) => v,
+            ValueGetter::Range(v1, v2) => v2,
+        }
+    }
 }
 
 // Manage multiple systems
-struct ParticleSystemCollection {
+pub struct ParticleSystemCollection {
     particle_systems: HashMap<u32, ParticleSystem>,
     last_identifier: u32,
 }
@@ -401,6 +424,13 @@ impl ParticleSystemCollection {
         self.last_identifier
     }
 
+    pub fn get_mut(&mut self, identifier: u32) -> Option<&mut ParticleSystem> {
+        if let Some(system) = self.particle_systems.get_mut(&identifier) {
+            return Some(system);
+        }
+        None
+    }
+
     // returns if system is still valid
     pub fn emit(&mut self, system_identifier: u32, amount: i32) -> bool {
         if let Some(system) = self.particle_systems.get_mut(&system_identifier) {
@@ -408,5 +438,12 @@ impl ParticleSystemCollection {
             return true;
         }
         false
+    }
+
+    pub fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
+        for (_id, system) in self.particle_systems.iter_mut() {
+            system.draw(ctx)?;
+        }
+        Ok(())
     }
 }
