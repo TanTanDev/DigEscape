@@ -24,6 +24,7 @@ use ggez::audio;
 const CLEAR_COLOR: Color = Color::new(0.0,0.0,0.0,1.0);
 const BACKGROUND_GAME: Color = Color::new(56.0/255.0, 82.0/255.0, 119.0/255.0, 1.0);
 const COLOR_BLINK: Color = Color::new(2.0,2.0,2.0,1.0);
+const COLOR_BLOOD: Color = Color::new(171.0/255.0, 34.0/255.0, 44.0/255.0, 1.0);
 const GAME_SCALE: f32 = 5.0;
 const TIME_BLINK: f32 = 0.4;
 const TIME_AUTO_STEP: f32 = 0.2;
@@ -338,7 +339,7 @@ impl SpriteCollection {
 
 impl GameState {
     fn new(ctx: &mut Context) -> GameState {
-        let font = graphics::Font::new(ctx, "kenny_fontpackage/Fonts/Kenney Blocks.ttf").unwrap();
+        let font = graphics::Font::new(ctx, "kenny_fontpackage/Fonts/Kenney Mini.ttf").unwrap();
         let mut game_over_text = graphics::Text::new(("PRESS (R) to restart!", font, 60.0));
         let mut all_levels_completed_text = graphics::Text::new(("You completed ALL LEVELS! Press R to play again", font, 30.0));
  
@@ -367,10 +368,11 @@ struct MainState {
     screen_size: na::Point2::<f32>,
     black_border_left: Option<BlackBorder>,
     black_border_right: Option<BlackBorder>,
-    //test_particle: ParticleSystem,
     particle_systems: ParticleSystemCollection,
+    // Particle system ids
     grass_id: u32,
     step_id: u32,
+    blood_id: u32,
 }
 
 impl MainState {
@@ -439,13 +441,18 @@ impl MainState {
         step_particle_system.start_lifetime = ValueGetter::Range(0.2, 0.3);
         step_particle_system.start_scale = ValueGetter::Range(1.0, 2.4);
         step_particle_system.start_color = ValueGetter::Single((82.0/255.0,166.0/255.0,32.0/255.0).into());
-        //step_particle_system.gravity = 0.0;
+
+        let mut blood_particle_system = ParticleSystem::new(ctx);
+        blood_particle_system.start_lifetime = ValueGetter::Range(0.3, 0.5);
+        blood_particle_system.start_scale = ValueGetter::Range(1.0, 10.4);
+        blood_particle_system.start_color = ValueGetter::Single(COLOR_BLOOD);
 
         let grass_id = particle_systems.add_system(grass_particle_system);
         let step_id = particle_systems.add_system(step_particle_system);
+        let blood_id = particle_systems.add_system(blood_particle_system);
 
         let mut game_state = GameState::new(ctx);
-        let mut main_state = MainState{
+        let mut main_state = MainState {
             sprite_collection,
             sound_collection,
             game_state,
@@ -456,6 +463,7 @@ impl MainState {
             particle_systems,
             grass_id,
             step_id,
+            blood_id,
         };
 
         use ggez::event::EventHandler;
@@ -492,7 +500,9 @@ impl event::EventHandler for MainState {
                 , &mut self.particle_systems, &self.grass_id
                 , &self.step_id);
 
-            skeleton_system(&mut self.game_state, ctx, &mut self.sound_collection);
+            skeleton_system(&mut self.game_state, ctx, &mut self.sound_collection
+                , &mut self.particle_systems, &self.blood_id, &self.screen_size);
+
             skeleton_block_system(&mut self.game_state, &mut self.sound_collection);
         }
         Ok(())
@@ -951,7 +961,8 @@ fn skeleton_reset_turns(game_state: &mut GameState) {
     }
 }
 
-fn skeleton_walk(game_state: &mut GameState, sound_collection: &mut SoundCollection) {
+fn skeleton_walk(game_state: &mut GameState, sound_collection: &mut SoundCollection)
+{
     let pos_player = game_state.player.transform.position;
     let mut skeleton_new_positions = HashMap::new();
     let mut skeleton_wants_attack: Vec<usize> = vec![];
@@ -1028,7 +1039,10 @@ fn skeleton_walk(game_state: &mut GameState, sound_collection: &mut SoundCollect
     }
 }
 
-fn skeleton_attack(game_state: &mut GameState, ctx: &mut Context, sound_collection: &mut SoundCollection) {
+fn skeleton_attack(game_state: &mut GameState, ctx: &mut Context
+    , sound_collection: &mut SoundCollection, particle_collection: &mut ParticleSystemCollection
+    , blood_id: &u32, screen_size: &na::Point2<f32>)
+{
     let player = &mut game_state.player;
     let pos_player = &player.transform.position;
     for skeleton in game_state.skeletons.iter_mut()
@@ -1049,6 +1063,17 @@ fn skeleton_attack(game_state: &mut GameState, ctx: &mut Context, sound_collecti
                 skeleton.ai.state = AiState::Walk;    
                 skeleton.sprite.texture_index = 4;
                 sound_collection.play(2);
+
+                let blood_particles = particle_collection.get_mut(*blood_id).unwrap();
+                blood_particles.scale = screen_size.x/16.0;
+                let pos_player_visual = player.sprite.visual_position;
+                let mut pos_particle = na::Vector2::new(
+                    pos_player_visual.x/screen_size.x*16.0
+                    , pos_player_visual.y/screen_size.x*16.0);
+                pos_particle += na::Vector2::new(16.0*0.5, 16.0*0.5);
+
+                blood_particles.position = pos_particle;
+                blood_particles.emit(20);
             },
             false => {
                 skeleton.ai.state = AiState::Walk;    
@@ -1059,8 +1084,10 @@ fn skeleton_attack(game_state: &mut GameState, ctx: &mut Context, sound_collecti
     }
 }
 
-fn skeleton_system(game_state: &mut GameState, ctx: &mut Context, sound_collection: &mut SoundCollection) {
-    skeleton_attack(game_state, ctx, sound_collection);
+fn skeleton_system(game_state: &mut GameState, ctx: &mut Context, sound_collection: &mut SoundCollection
+    , particle_collection: &mut ParticleSystemCollection, blood_id: &u32, screen_size: &na::Point2<f32>)
+{
+    skeleton_attack(game_state, ctx, sound_collection, particle_collection, blood_id, screen_size);
     skeleton_walk(game_state, sound_collection);
     skeleton_reset_turns(game_state);
 }
