@@ -1030,9 +1030,13 @@ fn skeleton_walk(game_state: &mut GameState, sound_collection: &mut SoundCollect
             is_occupied |= game_state.grasses.iter().any(|g|g.transform.position == pos_skele);
             is_occupied |= game_state.skeleton_blocks.iter().any(|s|s.transform.position == pos_skele);
             is_occupied |= game_state.skeletons.iter().any(|s|s.transform.position == pos_skele);
-            let pos_above_skeleton = skeleton.transform.position - na::Vector2::new(0, 1);
+            let up_vector = na::Vector2::new(0,-1);
+            let is_other_skeleton_falling = game_state.skeletons.iter().any(|s|s.transform.position == pos_skele + up_vector ); 
+            
+            let pos_above_skeleton = skeleton.transform.position + up_vector;
             let is_skeleton_above = game_state.skeletons.iter().any(|s|s.transform.position == pos_above_skeleton);
-            if !is_occupied && !game_state.player.is_on_skeleton && !is_skeleton_above {
+
+            if !is_occupied && !game_state.player.is_on_skeleton && !is_skeleton_above && !is_other_skeleton_falling {
                 new_position = pos_skele;
             }
         } else { // handle gravity
