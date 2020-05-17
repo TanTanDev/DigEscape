@@ -152,23 +152,23 @@ impl Player {
         }
 
         self.time_since_step += dt;
+        let pos_below = self.transform.position + na::Vector2::new(0, 1);
+        let mut is_grounded = skeletons.iter().any(|s|s.transform.position == pos_below);
+        self.is_on_skeleton = is_grounded;
+        is_grounded |= grasses.iter().any(|g|g.transform.position == pos_below);
+        is_grounded |= skeleton_blocks.iter().any(|s|s.transform.position == pos_below);
 
-        if self.input_intent != PlayerInputIntent::None {
+        if self.input_intent != PlayerInputIntent::None && is_grounded {
             self.time_since_step = 0.0;
             return true;
         }
 
         if self.time_since_step > TIME_AUTO_STEP {
-            let pos_below = self.transform.position + na::Vector2::new(0, 1);
-            let mut is_grounded = skeletons.iter().any(|s|s.transform.position == pos_below);
-            self.is_on_skeleton = is_grounded;
-            is_grounded |= grasses.iter().any(|g|g.transform.position == pos_below);
-            is_grounded |= skeleton_blocks.iter().any(|s|s.transform.position == pos_below);
-
             if !is_grounded {
                 self.time_since_step = 0.0;
                 return true;
             }
+
             if is_grounded && !self.prev_grounded {
                 self.sprite.texture_index = 0;
                 self.prev_grounded = true;
@@ -555,8 +555,7 @@ impl event::EventHandler for MainState {
             KeyCode::Up | KeyCode::W => PlayerInputIntent::Up, 
             _ => PlayerInputIntent::None,
         };
-        if let KeyCode::Space = keycode {
-        }
+
         self.game_state.player.input_intent = intent;
         match keycode {
             KeyCode::R => {
