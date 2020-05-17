@@ -392,27 +392,27 @@ struct MainState {
 impl MainState {
     fn new(ctx: &mut Context) -> GameResult<MainState> {
         let mut images = [
-            graphics::Image::new(ctx, "player.png")?,
-            graphics::Image::new(ctx, "ground.png")?,
-            graphics::Image::new(ctx, "unburied.png")?,
-            graphics::Image::new(ctx, "buried.png")?,
-            graphics::Image::new(ctx, "skeleton_neutral.png")?,
-            graphics::Image::new(ctx, "blue_door.png")?,
-            graphics::Image::new(ctx, "red_door.png")?,
-            graphics::Image::new(ctx, "skeleton_attack.png")?,
-            graphics::Image::new(ctx, "player_dig.png")?,
-            graphics::Image::new(ctx, "player_dead.png")?,
-            graphics::Image::new(ctx, "ground_below.png")?,
-            graphics::Image::new(ctx, "sound_on.png")?,
-            graphics::Image::new(ctx, "sound_off.png")?,
-            graphics::Image::new(ctx, "player_fall.png")?,
-            graphics::Image::new(ctx, "foilage_1.png")?,
-            graphics::Image::new(ctx, "foilage_2.png")?,
-            graphics::Image::new(ctx, "foilage_3.png")?,
-            graphics::Image::new(ctx, "foilage_4.png")?,
-            graphics::Image::new(ctx, "cloud_1.png")?,
-            graphics::Image::new(ctx, "cloud_2.png")?,
-            graphics::Image::new(ctx, "cloud_3.png")?,
+            graphics::Image::new(ctx, "textures/player.png")?,
+            graphics::Image::new(ctx, "textures/ground.png")?,
+            graphics::Image::new(ctx, "textures/unburied.png")?,
+            graphics::Image::new(ctx, "textures/buried.png")?,
+            graphics::Image::new(ctx, "textures/skeleton_neutral.png")?,
+            graphics::Image::new(ctx, "textures/blue_door.png")?,
+            graphics::Image::new(ctx, "textures/red_door.png")?,
+            graphics::Image::new(ctx, "textures/skeleton_attack.png")?,
+            graphics::Image::new(ctx, "textures/player_dig.png")?,
+            graphics::Image::new(ctx, "textures/player_dead.png")?,
+            graphics::Image::new(ctx, "textures/ground_below.png")?,
+            graphics::Image::new(ctx, "textures/sound_on.png")?,
+            graphics::Image::new(ctx, "textures/sound_off.png")?,
+            graphics::Image::new(ctx, "textures/player_fall.png")?,
+            graphics::Image::new(ctx, "textures/foilage_1.png")?,
+            graphics::Image::new(ctx, "textures/foilage_2.png")?,
+            graphics::Image::new(ctx, "textures/foilage_3.png")?,
+            graphics::Image::new(ctx, "textures/foilage_4.png")?,
+            graphics::Image::new(ctx, "textures/cloud_1.png")?,
+            graphics::Image::new(ctx, "textures/cloud_2.png")?,
+            graphics::Image::new(ctx, "textures/cloud_3.png")?,
         ];
 
         for img in &mut images {
@@ -424,16 +424,16 @@ impl MainState {
         };
 
         let mut sounds = [
-            audio::Source::new(ctx, "player_walk.wav")?,
-            audio::Source::new(ctx, "player_dig.wav")?,
-            audio::Source::new(ctx, "player_hit.wav")?,
-            audio::Source::new(ctx, "player_teleport.wav")?,
-            audio::Source::new(ctx, "level_completed.wav")?,
-            audio::Source::new(ctx, "skeleton_attack.wav")?,
-            audio::Source::new(ctx, "door_locked.wav")?,
-            audio::Source::new(ctx, "player_fall.wav")?,
-            audio::Source::new(ctx, "player_land.wav")?,
-            audio::Source::new(ctx, "level_restarted.wav")?,
+            audio::Source::new(ctx, "sounds/player_walk.wav")?,
+            audio::Source::new(ctx, "sounds/player_dig.wav")?,
+            audio::Source::new(ctx, "sounds/player_hit.wav")?,
+            audio::Source::new(ctx, "sounds/player_teleport.wav")?,
+            audio::Source::new(ctx, "sounds/level_completed.wav")?,
+            audio::Source::new(ctx, "sounds/skeleton_attack.wav")?,
+            audio::Source::new(ctx, "sounds/door_locked.wav")?,
+            audio::Source::new(ctx, "sounds/player_fall.wav")?,
+            audio::Source::new(ctx, "sounds/player_land.wav")?,
+            audio::Source::new(ctx, "sounds/level_restarted.wav")?,
         ];
         let sound_collection = SoundCollection {
             is_on: true,
@@ -817,18 +817,24 @@ fn render_text(text: &graphics::Text, ctx: &mut Context, screen_size: &na::Point
 }
 
 const MAP_NAMES: &[&str] = &[
-
-    "/map_first.txt","/map_1skeleton.txt"
-    ,"/map_2skeleton.txt", "/map_gravity.txt", "/map_teleport.txt"
-    ,"/map_simple_backtrack.txt"
-    ,"/map_follow.txt", "/map_follow_2.txt", "/map_middleclash.txt"
-    ,"/map_2skeleton_intro.txt"
-    ,"/map_maze1.txt"
-    ,"/map_2skeleton_backtrack.txt"
-    ,"/map_skeleton_hole.txt"
-    ,"/map_3skeleton.txt", "/map_3skeleton_3holes.txt"
-    ,"/map_middleclash_2.txt"
-    ,"/map_skeleton_platform.txt", "/map_3skeleton_3holes_harder.txt"];
+    "/maps/map_first.txt"
+    ,"/maps/map_1skeleton.txt"
+    ,"/maps/map_2skeleton.txt"
+    ,"/maps/map_gravity.txt"
+    ,"/maps/map_teleport.txt"
+    ,"/maps/map_simple_backtrack.txt"
+    ,"/maps/map_follow.txt"
+    ,"/maps/map_middleclash.txt"
+    ,"/maps/map_2skeleton_intro.txt"
+    ,"/maps/map_2skeleton_backtrack.txt"
+    ,"/maps/map_maze1.txt"
+    ,"/maps/map_follow_2.txt"
+    ,"/maps/map_skeleton_hole.txt"
+    ,"/maps/map_3skeleton.txt"
+    ,"/maps/map_3skeleton_3holes.txt"
+    ,"/maps/map_middleclash_2.txt"
+    ,"/maps/map_skeleton_platform.txt"
+    ,"/maps/map_3skeleton_3holes_harder.txt"];
 const MAP_COUNT: usize = MAP_NAMES.len();
 
 fn get_map_name(index: usize) -> &'static str {
