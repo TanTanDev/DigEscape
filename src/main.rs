@@ -992,11 +992,13 @@ fn skeleton_reset_turns(game_state: &mut GameState) {
     }
 }
 
-fn skeleton_walk(game_state: &mut GameState, sound_collection: &mut SoundCollection)
+fn skeleton_walk(game_state: &mut GameState, sound_collection: &mut SoundCollection
+    , screen_size: &na::Point2::<f32>)
 {
     let pos_player = game_state.player.transform.position;
     let mut skeleton_new_positions = HashMap::new();
     let mut skeleton_wants_attack: Vec<usize> = vec![];
+    let mut skeleton_warped_y: Vec<usize> = vec![];
     let mut skeleton_flip_dirs = HashMap::new();
 
     for (index, skeleton) in game_state.skeletons.iter()
@@ -1042,7 +1044,10 @@ fn skeleton_walk(game_state: &mut GameState, sound_collection: &mut SoundCollect
             new_position = pos_below;
         }
 
-        in_bounds(&mut new_position);
+        let warped_y = skeleton_in_bounds(&mut new_position);
+        if warped_y {
+            skeleton_warped_y.push(index);
+        }
         let is_occupied = skeleton_new_positions.iter().any(|(i, p)|*p == new_position);
         if is_occupied {
             //skeleton_new_positions.insert(index, skeleton.transform.position);
@@ -1070,6 +1075,16 @@ fn skeleton_walk(game_state: &mut GameState, sound_collection: &mut SoundCollect
     for (i, flipped) in skeleton_flip_dirs.iter() {
         if let Some(skeleton) = game_state.skeletons.get_mut(*i) {
             skeleton.sprite.is_flipped = *flipped;
+        }
+    }
+    for i in skeleton_warped_y.iter() {
+        match game_state.skeletons.get_mut(*i) {
+            Some(skeleton) => {
+                skeleton.sprite.blink_timer = TIME_BLINK;
+                let position = na::convert::<na::Point2::<i32>, na::Point2::<f32>>(skeleton.transform.position); 
+                skeleton.sprite.visual_position = position*screen_size.x;
+            },
+            None => {},
         }
     }
 }
@@ -1123,14 +1138,19 @@ fn skeleton_system(game_state: &mut GameState, ctx: &mut Context, sound_collecti
     , particle_collection: &mut ParticleSystemCollection, blood_id: &u32, screen_size: &na::Point2<f32>)
 {
     skeleton_attack(game_state, ctx, sound_collection, particle_collection, blood_id, screen_size);
-    skeleton_walk(game_state, sound_collection);
+    skeleton_walk(game_state, sound_collection, screen_size);
     skeleton_reset_turns(game_state);
 }
 
-fn in_bounds(position: &mut na::Point2::<i32>) {
+// Returns if the skeleton warped y
+fn skeleton_in_bounds(position: &mut na::Point2::<i32>) -> bool {
     if position.x < 0 { position.x = 0; }
     else if position.x > GAME_BOUNDS_X {position.x = GAME_BOUNDS_X; }
-    if position.y > GAME_BOUNDS_Y {position.y = 0}
+    if position.y > GAME_BOUNDS_Y { 
+        position.y = 0;
+        return true;
+    }
+    false
 }
 
 fn emit_step_particle(particle_collection: &mut ParticleSystemCollection, step_id: &u32
@@ -1178,6 +1198,10 @@ fn player_system(game_state: &mut GameState, ctx: &mut Context
 
         if player.transform.position.y > GAME_BOUNDS_Y {
             player.transform.position.y = 0;
+            // Force visual insta jump
+            let pos_player_unscaled = na::convert::<na::Point2::<i32>, na::Point2::<f32>>(player.transform.position); 
+            player.sprite.visual_position = pos_player_unscaled*screen_size.x;
+            player.sprite.blink_timer = TIME_BLINK;
         }
         return;
     }
