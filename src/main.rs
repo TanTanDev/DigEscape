@@ -143,7 +143,9 @@ impl Default for Player {
 impl Player {
     fn should_step(&mut self, dt: f32, grasses: &Vec<Grass>
         , skeletons: &Vec<Skeleton>, skeleton_blocks: &Vec<SkeletonBlock>
-        , sound_collection: &mut SoundCollection) -> bool
+        , sound_collection: &mut SoundCollection, particle_collection: &mut ParticleSystemCollection
+        , land_id: &u32, screen_size: &na::Point2<f32>
+        ) -> bool
     {
         if !self.is_alive {
             return false;
@@ -171,6 +173,17 @@ impl Player {
                 self.sprite.texture_index = 0;
                 self.prev_grounded = true;
                 sound_collection.play(8);
+
+                let mut land_particles = particle_collection.get_mut(*land_id).unwrap();
+                land_particles.scale = screen_size.x/16.0;
+                let pos_player_visual = self.sprite.visual_position;
+                let mut pos_particle = na::Vector2::new(
+                    pos_player_visual.x/screen_size.x*16.0
+                    , pos_player_visual.y/screen_size.x*16.0);
+                pos_particle += na::Vector2::new(16.0*0.5, 16.0);
+
+                land_particles.position = pos_particle;
+                land_particles.emit(15);
             }
        }
        false
@@ -373,6 +386,7 @@ struct MainState {
     grass_id: u32,
     step_id: u32,
     blood_id: u32,
+    land_id: u32,
 }
 
 impl MainState {
@@ -447,9 +461,17 @@ impl MainState {
         blood_particle_system.start_scale = ValueGetter::Range(1.0, 10.4);
         blood_particle_system.start_color = ValueGetter::Single(COLOR_BLOOD);
 
+        let mut land_particle_system = ParticleSystem::new(ctx);
+        land_particle_system.start_lifetime = ValueGetter::Range(0.3, 0.5);
+        land_particle_system.start_speed = ValueGetter::Range(0.3, 1.5);
+        land_particle_system.start_scale = ValueGetter::Range(1.0, 4.4);
+        land_particle_system.gravity = -1.0;
+        land_particle_system.start_color = ValueGetter::Single(ggez::graphics::WHITE);
+
         let grass_id = particle_systems.add_system(grass_particle_system);
         let step_id = particle_systems.add_system(step_particle_system);
         let blood_id = particle_systems.add_system(blood_particle_system);
+        let land_id = particle_systems.add_system(land_particle_system);
 
         let mut game_state = GameState::new(ctx);
         let mut main_state = MainState {
@@ -464,6 +486,7 @@ impl MainState {
             grass_id,
             step_id,
             blood_id,
+            land_id,
         };
 
         use ggez::event::EventHandler;
@@ -491,7 +514,8 @@ impl event::EventHandler for MainState {
             let player = &mut self.game_state.player;
             should_step = player.should_step(delta, &self.game_state.grasses
                 , &self.game_state.skeletons, &self.game_state.skeleton_blocks
-                , &mut self.sound_collection);
+                , &mut self.sound_collection, &mut self.particle_systems
+                , &self.land_id, &self.screen_size);
         }
 
         if should_step {
