@@ -826,16 +826,25 @@ const MAP_NAMES: &[&str] = &[
     ,"/maps/map_middleclash.txt"
     ,"/maps/map_2skeleton_intro.txt"
     ,"/maps/map_2skeleton_backtrack.txt"
-    ,"maps/map_fall_trap.txt"
     ,"/maps/map_force_stand.txt"
+    ,"maps/map_fall_trap.txt"
     ,"/maps/map_skeleton_hole.txt"
+    ,"/maps/map_easy_accidental_fall.txt"
+    ,"/maps/map_easy3.txt"
+    ,"/maps/map_easy1.txt"
     ,"/maps/map_maze1.txt"
     ,"/maps/map_follow_2.txt"
+    ,"/maps/map_easy2.txt" 
     ,"/maps/map_3skeleton.txt"
     ,"/maps/map_3skeleton_3holes.txt"
-    ,"/maps/map_middleclash_2.txt"
     ,"/maps/map_skeleton_platform.txt"
-    ,"/maps/map_3skeleton_3holes_harder.txt"];
+    ,"/maps/map_middleclash_2.txt"
+    ,"/maps/map_3skeleton_3holes_harder.txt"
+    ,"/maps/map_hard1.txt"
+    ,"/maps/map_hard3.txt"
+    ,"/maps/map_hard2.txt"
+    ];
+
 const MAP_COUNT: usize = MAP_NAMES.len();
 
 fn get_map_name(index: usize) -> &'static str {
