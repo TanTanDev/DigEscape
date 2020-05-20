@@ -42,6 +42,8 @@ const MIN_CLOUDS: i32 = 2;
 const CLOUD_MIN_SPEED: f32 = 0.1;
 const CLOUD_MAX_SPEED: f32 = 0.6;
 const CLOUD_MAX_SCALE: f32 = 2.0;
+const TOUCH_MIN_DELTA: f32 = 10.0; 
+const TEXT_PADDING_SIZE: f32 = 0.3; // fits all text inside screen with this padding in procentage
 const PI: f32 = std::f32::consts::PI;
 
 enum FoilageType {
@@ -387,6 +389,7 @@ struct MainState {
     step_id: u32,
     blood_id: u32,
     land_id: u32,
+    mouse_pos_down: na::Vector2::<f32>,
 }
 
 impl MainState {
@@ -487,6 +490,7 @@ impl MainState {
             step_id,
             blood_id,
             land_id,
+            mouse_pos_down : na::Vector2::new(0.0, 0.0),
         };
 
         use ggez::event::EventHandler;
@@ -496,6 +500,18 @@ impl MainState {
 
         load_map(ctx, &mut main_state.game_state, 0, &main_state.screen_size);
         Ok(main_state)
+    }
+}
+
+impl MainState {
+    fn restart_current_map(&mut self, ctx: &mut Context) {
+        if self.game_state.is_all_levels_completed {
+            self.current_map = 0;
+            self.game_state.is_all_levels_completed = false;
+        }
+        clear_map(&mut self.game_state);
+        load_map(ctx, &mut self.game_state, self.current_map, &self.screen_size);
+        self.sound_collection.play(9);
     }
 }
 
@@ -559,13 +575,7 @@ impl event::EventHandler for MainState {
         self.game_state.player.input_intent = intent;
         match keycode {
             KeyCode::R => {
-                if self.game_state.is_all_levels_completed {
-                    self.current_map = 0;
-                    self.game_state.is_all_levels_completed = false;
-                }
-                clear_map(&mut self.game_state);
-                load_map(ctx, &mut self.game_state, self.current_map, &self.screen_size);
-                self.sound_collection.play(9);
+                self.restart_current_map(ctx);
             },
             KeyCode::M => {
                 self.sound_collection.is_on = !self.sound_collection.is_on;
@@ -573,6 +583,7 @@ impl event::EventHandler for MainState {
             _ => {},
         }
     }
+
 
     fn resize_event(&mut self, ctx: &mut Context, w: f32, h: f32) {
         // This scaling code is a mess, send halp
@@ -595,12 +606,47 @@ impl event::EventHandler for MainState {
             ,border_width, border_height, left_pos, right_pos, border_y);
     }
 
+    fn mouse_button_down_event(&mut self, _ctx: &mut Context, button: ggez::event::MouseButton, x: f32, y: f32) {
+        self.mouse_pos_down = na::Vector2::new(x, y);
+    }
+
     fn mouse_button_up_event(&mut self, ctx: &mut Context, button: ggez::event::MouseButton, x: f32, y: f32) {
+        let current_pos = na::Point2::new(x, y);
+        // Mute button
         let screen_rect = ggez::graphics::screen_coordinates(ctx);
         let volume_rect = ggez::graphics::Rect::new(-screen_rect.x, -screen_rect.y, 64.0, 64.0);
-        if volume_rect.contains(na::Point2::new(x, y)) {
+        if volume_rect.contains(current_pos) {
             self.sound_collection.is_on = !self.sound_collection.is_on; 
         }
+
+        let current_pos: na::Vector2::<f32> = na::Vector2::new(current_pos.x, current_pos.y);
+        let delta = current_pos - self.mouse_pos_down;
+
+        // Restart input Currently tap anywhere on screen if delta is below move action
+        if !self.game_state.player.is_alive && delta.norm() < TOUCH_MIN_DELTA {
+            self.restart_current_map(ctx);
+        }
+
+        // touch input
+        let mut input_intent = PlayerInputIntent::None;
+        if delta.norm() > TOUCH_MIN_DELTA {
+            let xDiff = delta.x.abs();
+            let yDiff = delta.y.abs();                
+            if xDiff > yDiff {
+                if delta.x > 0.0 {
+                    input_intent = PlayerInputIntent::Right;
+                } else {
+                    input_intent = PlayerInputIntent::Left;
+                }
+            } else {
+                if delta.y > 0.0 {
+                    input_intent = PlayerInputIntent::Down;
+                } else {
+                    input_intent = PlayerInputIntent::Up;
+                }
+            }
+        }
+        self.game_state.player.input_intent = input_intent;
     }
 }
 
@@ -809,9 +855,19 @@ fn render_text(text: &graphics::Text, ctx: &mut Context, screen_size: &na::Point
     let sizeY = screen_size.x * 8.0;
     let mut pos_centered = na::Point2::new(sizeX*0.5, sizeY*0.5);
     let (textW, textH) = text.dimensions(ctx);
-    pos_centered.x -= textW as f32 *0.5;
-    pos_centered.y -= textH as f32 *0.5;
-    graphics::draw(ctx, text, (pos_centered + offset, graphics::WHITE),)?;
+    let padding_scale = (1.0 - TEXT_PADDING_SIZE);
+    let scale = (sizeX / textW) * padding_scale;
+    pos_centered.x -= textW as f32 * 0.5 * scale;
+    pos_centered.y -= textH as f32 * 0.5 * scale;
+
+    let draw_param = DrawParam {
+        dest: (pos_centered + offset).into(),
+        offset: mint::Point2{x: 0.0, y: 0.0}, 
+        color: graphics::WHITE,
+        scale: mint::Vector2{x: scale, y: scale},
+        .. Default::default()
+    };
+    graphics::draw(ctx, text, draw_param)?;
     Ok(())
 }
 
