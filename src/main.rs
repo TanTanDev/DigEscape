@@ -53,13 +53,14 @@ enum FoilageType {
 
 struct Foilage {
     position: na::Point2::<f32>,
+    pos_i32: na::Point2::<i32>, // belongs to this grasss, position
     sprite: SpriteComponent,
     foilage_type: FoilageType,
     time_offset: f32,
 }
 
 impl Foilage {
-    fn new(position: na::Point2<f32>) -> Self {
+    fn new(position: na::Point2<f32>, pos_i32: na::Point2<i32>) -> Self {
         let is_bush = rand::gen_range(0.0, 1.0) < FOILAGE_BUSH_CHANCE;
         let foilage_type = if is_bush { FoilageType::Bush } else { FoilageType::Straw };
         let texture_index = match foilage_type {
@@ -69,6 +70,7 @@ impl Foilage {
 
         Foilage {
             position,
+            pos_i32,
             sprite: SpriteComponent {
                 texture_index,
                 scale: na::Vector2::new(1.0, 1.0),
@@ -389,6 +391,10 @@ struct MainState {
     step_id: u32,
     blood_id: u32,
     land_id: u32,
+    foilage_1_id: u32,
+    foilage_2_id: u32,
+    foilage_3_id: u32,
+    foilage_4_id: u32,
     mouse_pos_down: na::Vector2::<f32>,
 }
 
@@ -443,7 +449,7 @@ impl MainState {
             sounds,
         };
         let mut particle_systems = ParticleSystemCollection::new();
-        let mut grass_particle_system = ParticleSystem::new(ctx);
+        let mut grass_particle_system = ParticleSystem::new(ctx, None);
         grass_particle_system.start_color = ValueGetter::Range(
             (82.0/255.0,166.0/255.0,32.0/255.0).into()
             , (66.0/255.0, 54.0/255.0,39.0/255.0).into());
@@ -454,27 +460,52 @@ impl MainState {
         grass_particle_system.start_scale = ValueGetter::Range(2.0, 3.4);
         grass_particle_system.start_angular_velocity = ValueGetter::Range(2.0, 30.4);
 
-        let mut step_particle_system = ParticleSystem::new(ctx);
+        let mut step_particle_system = ParticleSystem::new(ctx, None);
         step_particle_system.start_lifetime = ValueGetter::Range(0.2, 0.3);
         step_particle_system.start_scale = ValueGetter::Range(1.0, 2.4);
         step_particle_system.start_color = ValueGetter::Single((82.0/255.0,166.0/255.0,32.0/255.0).into());
 
-        let mut blood_particle_system = ParticleSystem::new(ctx);
+        let mut blood_particle_system = ParticleSystem::new(ctx, None);
         blood_particle_system.start_lifetime = ValueGetter::Range(0.3, 0.5);
         blood_particle_system.start_scale = ValueGetter::Range(1.0, 10.4);
         blood_particle_system.start_color = ValueGetter::Single(COLOR_BLOOD);
 
-        let mut land_particle_system = ParticleSystem::new(ctx);
+        let mut land_particle_system = ParticleSystem::new(ctx, None);
         land_particle_system.start_lifetime = ValueGetter::Range(0.3, 0.5);
         land_particle_system.start_speed = ValueGetter::Range(0.3, 1.5);
         land_particle_system.start_scale = ValueGetter::Range(1.0, 4.4);
         land_particle_system.gravity = -1.0;
         land_particle_system.start_color = ValueGetter::Single(ggez::graphics::WHITE);
 
+        // Foilage particles
+        let foilage_1_image = sprite_collection.images.get(14).expect("no foilage 1 image");
+        let foilage_2_image = sprite_collection.images.get(15).expect("no foilage 2 image");
+        let foilage_3_image = sprite_collection.images.get(16).expect("no foilage 3 image");
+        let foilage_4_image = sprite_collection.images.get(17).expect("no foilage 4 image");
+
+        let mut foilage_1_particle_system = ParticleSystem::new(ctx, Some(foilage_1_image.clone()));
+        foilage_1_particle_system.start_color = ValueGetter::Single(graphics::WHITE);
+        foilage_1_particle_system.velocity_type = VelocityType::Angle(AngleData::new(PI, Some(0.1)));
+        foilage_1_particle_system.start_speed = ValueGetter::Range(2.0,7.0);
+        foilage_1_particle_system.end_scale = 3.0;
+        foilage_1_particle_system.start_lifetime = ValueGetter::Single(6.0);
+        foilage_1_particle_system.start_scale = ValueGetter::Single(1.0);
+
+        let mut foilage_2_particle_system = ParticleSystem::new(ctx, Some(foilage_2_image.clone()));
+        let mut foilage_3_particle_system = ParticleSystem::new(ctx, Some(foilage_3_image.clone()));
+        let mut foilage_4_particle_system = ParticleSystem::new(ctx, Some(foilage_4_image.clone()));
+        foilage_2_particle_system.copy_settings(&foilage_1_particle_system);
+        foilage_3_particle_system.copy_settings(&foilage_1_particle_system);
+        foilage_4_particle_system.copy_settings(&foilage_1_particle_system);
+
         let grass_id = particle_systems.add_system(grass_particle_system);
         let step_id = particle_systems.add_system(step_particle_system);
         let blood_id = particle_systems.add_system(blood_particle_system);
         let land_id = particle_systems.add_system(land_particle_system);
+        let foilage_1_id = particle_systems.add_system(foilage_1_particle_system);
+        let foilage_2_id = particle_systems.add_system(foilage_2_particle_system);
+        let foilage_3_id = particle_systems.add_system(foilage_3_particle_system);
+        let foilage_4_id = particle_systems.add_system(foilage_4_particle_system);
 
         let mut game_state = GameState::new(ctx);
         let mut main_state = MainState {
@@ -490,6 +521,10 @@ impl MainState {
             step_id,
             blood_id,
             land_id,
+            foilage_1_id,
+            foilage_2_id,
+            foilage_3_id,
+            foilage_4_id,
             mouse_pos_down : na::Vector2::new(0.0, 0.0),
         };
 
@@ -538,7 +573,7 @@ impl event::EventHandler for MainState {
             player_system(&mut self.game_state, ctx, &mut self.current_map
                 , &mut self.sound_collection, &self.screen_size
                 , &mut self.particle_systems, &self.grass_id
-                , &self.step_id);
+                , &self.step_id, &self.foilage_1_id, &self.foilage_2_id, &self.foilage_3_id, &self.foilage_4_id);
 
             skeleton_system(&mut self.game_state, ctx, &mut self.sound_collection
                 , &mut self.particle_systems, &self.blood_id, &self.screen_size);
@@ -981,7 +1016,7 @@ fn load_map(ctx: &mut Context, game_state: &mut GameState, map_index: usize, scr
             } else {
                 position.x += 0.33;
             }
-            game_state.foilages.push(Foilage::new(position));
+            game_state.foilages.push(Foilage::new(position, grass.transform.position));
         }
     }
     // Clouds generation
@@ -1242,7 +1277,8 @@ fn emit_step_particle(particle_collection: &mut ParticleSystemCollection, step_i
 
 fn player_system(game_state: &mut GameState, ctx: &mut Context
     , current_map: &mut usize, sound_collection: &mut SoundCollection, screen_size: &na::Point2<f32>
-    , particle_collection: &mut ParticleSystemCollection, grass_id: &u32, step_id: &u32)
+    , particle_collection: &mut ParticleSystemCollection, grass_id: &u32, step_id: &u32
+    , foilage_1_id: &u32, foilage_2_id: &u32, foilage_3_id: &u32, foilage_4_id: &u32)
 {
     let mut should_exit = false;
     
@@ -1284,7 +1320,7 @@ fn player_system(game_state: &mut GameState, ctx: &mut Context
                 player.transform.position = new_position;
                 sound_collection.play(0);
 
-                emit_step_particle(particle_collection, step_id, 8, false, player, screen_size);
+                emit_step_particle(particle_collection, step_id, 9, false, player, screen_size);
             }
         },
         PlayerInputIntent::Right => {
@@ -1356,6 +1392,24 @@ fn player_system(game_state: &mut GameState, ctx: &mut Context
 
             sound_collection.play(1);
             player.sprite.texture_index = 8;
+            
+            // Foilage fly!
+            let foilage_index_option = game_state.foilages.iter().position(|f| f.pos_i32 == pos_below);
+            if let Some(foilage_index) = foilage_index_option {
+                let foilage = game_state.foilages.remove(foilage_index);
+                let foilage_texture_index = foilage.sprite.texture_index;
+                let particle_system_index = match foilage_texture_index {
+                    14 => *foilage_1_id,
+                    15 => *foilage_2_id,
+                    16 => *foilage_3_id,
+                    17 => *foilage_4_id,
+                    _ => *foilage_1_id,
+                };
+                let foilage_particle_system = particle_collection.get_mut(particle_system_index).unwrap();
+                foilage_particle_system.scale = screen_size.x/16.0;
+                foilage_particle_system.position = pos_particle;
+                foilage_particle_system.emit(2);
+            }
         },
         PlayerInputIntent::None => {}
    }
