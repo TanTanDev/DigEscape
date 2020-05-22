@@ -1408,7 +1408,7 @@ fn player_system(game_state: &mut GameState, ctx: &mut Context
                 let foilage_particle_system = particle_collection.get_mut(particle_system_index).unwrap();
                 foilage_particle_system.scale = screen_size.x/16.0;
                 foilage_particle_system.position = pos_particle;
-                foilage_particle_system.emit(2);
+                foilage_particle_system.emit(1);
             }
         },
         PlayerInputIntent::None => {}
