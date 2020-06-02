@@ -1,20 +1,20 @@
-use std::collections::VecDeque;
-use std::collections::HashMap;
-
-use nalgebra as na;
-use gwg::rand;
-use gwg as ggez;
-use ggez::{Context};
-use ggez::graphics::spritebatch::{SpriteBatch};
+use crate::transform_compontent::TransformComponent;
+use ggez::graphics::spritebatch::SpriteBatch;
 use ggez::graphics::{DrawParam, Image};
-use ggez::{GameResult};
+use ggez::Context;
+use ggez::GameResult;
+use gwg as ggez;
+use gwg::rand;
+use nalgebra as na;
+use std::collections::HashMap;
+use std::collections::VecDeque;
 
 static DEFAULT_CAPACITY: usize = 8;
 static PI: f32 = std::f32::consts::PI;
-static TAU: f32 = PI*2.0;
+static TAU: f32 = PI * 2.0;
 
-use na::Vector2 as Vector2;
-use na::Point2 as Point2;
+use na::Point2;
+use na::Vector2;
 
 // Todo, since start_lifetime can be randomized, the scaling will not start at start_scale
 // because the lifetime fraction also then is randomized
@@ -26,7 +26,7 @@ fn vec_from_angle(angle: f32) -> na::Vector2<f32> {
 }
 
 fn lerp(from: f32, to: f32, delta: f32) -> f32 {
-    (1.0-delta) * from + delta * to
+    (1.0 - delta) * from + delta * to
 }
 
 #[derive(Clone, Copy)]
@@ -37,8 +37,8 @@ pub enum TransformSpace {
 
 pub struct ParticleSystem {
     // Particle data
-    positions: Vec<Point2::<f32>>,
-    velocities: Vec<Vector2::<f32>>,
+    positions: Vec<Point2<f32>>,
+    velocities: Vec<Vector2<f32>>,
     angular_velocities: Vec<f32>,
     scales: Vec<f32>,
     rotations: Vec<f32>,
@@ -91,8 +91,8 @@ impl ParticleSystem {
     }
 
     pub fn new(ctx: &mut Context, image_option: Option<Image>) -> Self {
-        let mut available_indexes = VecDeque::with_capacity(DEFAULT_CAPACITY); 
-        for i in 0 .. available_indexes.capacity() {
+        let mut available_indexes = VecDeque::with_capacity(DEFAULT_CAPACITY);
+        for i in 0..available_indexes.capacity() {
             available_indexes.push_back(i);
         }
 
@@ -128,8 +128,10 @@ impl ParticleSystem {
             start_rotation: ValueGetter::Single(0.0),
             start_scale: ValueGetter::Single(16.0),
             start_angular_velocity: ValueGetter::Range(-1.0, 1.0),
-            start_color: ValueGetter::Range(ggez::graphics::Color::new(0.5,0.2, 0.2, 1.0)
-                , ggez::graphics::Color::new(1.0,1.0, 0.2, 1.0)),
+            start_color: ValueGetter::Range(
+                ggez::graphics::Color::new(0.5, 0.2, 0.2, 1.0),
+                ggez::graphics::Color::new(1.0, 1.0, 0.2, 1.0),
+            ),
 
             end_scale: 0.0,
 
@@ -137,23 +139,37 @@ impl ParticleSystem {
             sprite_batch,
         };
         let available_indexes = particle_system.available_indexes.len();
-        for i in 0..available_indexes { particle_system.positions.push(Point2::new(0.0,0.0)); }
-        for i in 0..available_indexes { particle_system.velocities.push(Vector2::new(0.0,0.0)); }
-        for i in 0..available_indexes { particle_system.scales.push(1.0); }
-        for i in 0..available_indexes { particle_system.lifetimes.push(0.0); }
-        for i in 0..available_indexes { particle_system.rotations.push(0.0); }
-        for i in 0..available_indexes { particle_system.angular_velocities.push(0.0); }
-        for i in 0..available_indexes { particle_system.colors.push(ggez::graphics::WHITE); }
+        for _i in 0..available_indexes {
+            particle_system.positions.push(Point2::new(0.0, 0.0));
+        }
+        for _i in 0..available_indexes {
+            particle_system.velocities.push(Vector2::new(0.0, 0.0));
+        }
+        for _i in 0..available_indexes {
+            particle_system.scales.push(1.0);
+        }
+        for _i in 0..available_indexes {
+            particle_system.lifetimes.push(0.0);
+        }
+        for _i in 0..available_indexes {
+            particle_system.rotations.push(0.0);
+        }
+        for _i in 0..available_indexes {
+            particle_system.angular_velocities.push(0.0);
+        }
+        for _i in 0..available_indexes {
+            particle_system.colors.push(ggez::graphics::WHITE);
+        }
         particle_system
     }
 
-    // Draw delegate, recieves 
+    // Draw delegate, recieves
     pub fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
         if !self.sprite_batch_dirty {
-            return Ok(())
+            return Ok(());
         }
         if self.particle_indexes.len() == 0 {
-            return Ok(())
+            return Ok(());
         }
         self.sprite_batch.clear();
         for i in self.particle_indexes.iter() {
@@ -165,11 +181,14 @@ impl ParticleSystem {
 
             let drawparam = DrawParam {
                 offset: Point2::new(0.5, 0.5).into(),
-                dest: (dest*self.scale).into(),
-                scale: mint::Vector2 {x: scale*self.scale , y: scale*self.scale },
+                dest: (dest * self.scale).into(),
+                scale: mint::Vector2 {
+                    x: scale * self.scale,
+                    y: scale * self.scale,
+                },
                 rotation: self.rotations[*i],
                 color: self.colors[*i],
-                .. Default::default()
+                ..Default::default()
             };
             self.sprite_batch.add(drawparam);
         }
@@ -190,7 +209,7 @@ impl ParticleSystem {
         particle_indexes.retain(|i| {
             lifetimes[*i] -= dt;
             if lifetimes[*i] < 0.0 {
-                available_indexes.push_back(*i); 
+                available_indexes.push_back(*i);
                 return false;
             }
             true
@@ -200,7 +219,8 @@ impl ParticleSystem {
             self.velocities[*i].y -= self.gravity * dt;
             self.positions[*i] += self.velocities[*i];
             self.rotations[*i] += self.angular_velocities[*i] * dt;
-            let normalized_life = (self.start_lifetime.max() - lifetimes[*i])/self.start_lifetime.max();
+            let normalized_life =
+                (self.start_lifetime.max() - lifetimes[*i]) / self.start_lifetime.max();
             self.scales[*i] = lerp(self.start_scale.max(), self.end_scale, normalized_life);
         }
         self.sprite_batch_dirty = true;
@@ -210,15 +230,15 @@ impl ParticleSystem {
         let mut amount = amount;
         //for i in 0..amount {
         while amount > 0 {
-            let index_option = self.available_indexes.pop_front(); 
+            let index_option = self.available_indexes.pop_front();
             match index_option {
                 Some(index) => {
                     // make unused particle come alive
                     self.particle_setup(index);
-                },
+                }
                 None => {
                     // Resize vectors and spawn a new particle
-                    let left_to_create = amount ;
+                    let left_to_create = amount;
                     self.grow(left_to_create as usize);
                     // we still have a particle to spawn
                     amount += 1;
@@ -242,13 +262,27 @@ impl ParticleSystem {
 
         let next_available_index = self.lifetimes.len();
 
-        for i in self.positions.len()..self.positions.capacity() { self.positions.push(Point2::new(0.0,0.0)); }
-        for i in self.velocities.len()..self.velocities.capacity() { self.velocities.push(Vector2::new(0.0,0.0)); }
-        for i in self.scales.len()..self.scales.capacity() { self.scales.push(0.0); }
-        for i in self.lifetimes.len()..self.lifetimes.capacity()  { self.lifetimes.push(0.0); }
-        for i in self.rotations.len()..self.rotations.capacity() { self.rotations.push(0.0); }
-        for i in self.angular_velocities.len()..self.angular_velocities.capacity() { self.angular_velocities.push(0.0); }
-        for i in self.colors.len()..self.colors.capacity() { self.colors.push(ggez::graphics::WHITE); }
+        for _i in self.positions.len()..self.positions.capacity() {
+            self.positions.push(Point2::new(0.0, 0.0));
+        }
+        for _i in self.velocities.len()..self.velocities.capacity() {
+            self.velocities.push(Vector2::new(0.0, 0.0));
+        }
+        for _i in self.scales.len()..self.scales.capacity() {
+            self.scales.push(0.0);
+        }
+        for _i in self.lifetimes.len()..self.lifetimes.capacity() {
+            self.lifetimes.push(0.0);
+        }
+        for _i in self.rotations.len()..self.rotations.capacity() {
+            self.rotations.push(0.0);
+        }
+        for _i in self.angular_velocities.len()..self.angular_velocities.capacity() {
+            self.angular_velocities.push(0.0);
+        }
+        for _i in self.colors.len()..self.colors.capacity() {
+            self.colors.push(ggez::graphics::WHITE);
+        }
 
         let newly_added = self.lifetimes.len() - next_available_index;
         for i in 0..newly_added {
@@ -288,8 +322,8 @@ pub enum EmitShape {
     Point, // The position of the particle system
     //Line(Vector2<f32>),
     //Rect(RectData),
-    //Cone(ConeData), 
-    Circle(CircleData)
+    //Cone(ConeData),
+    Circle(CircleData),
 }
 
 #[derive(Clone, Copy)]
@@ -320,31 +354,31 @@ enum SpawnType {
 // decides how velocity should be calculated
 #[derive(Clone, Copy)]
 pub enum VelocityType {
-    //AlignToDirection(AlignToDirectionData), 
+    //AlignToDirection(AlignToDirectionData),
     Angle(AngleData),
-    Random, 
+    Random,
 }
 
 #[derive(Clone, Copy)]
-struct AlignToDirectionData {
-    max_delta: Option<f32>,
+pub struct AlignToDirectionData {
+    pub max_delta: Option<f32>,
 }
 
 #[derive(Clone, Copy)]
 pub struct AngleData {
-    angle: f32,
-    max_delta: Option<f32>,
+    pub angle: f32,
+    pub max_delta: Option<f32>,
 }
 
 impl AngleData {
     pub fn new(angle: f32, max_delta: Option<f32>) -> Self {
-        AngleData{ angle, max_delta}
+        AngleData { angle, max_delta }
     }
 }
 
 impl EmitShape {
     // Todo: Implement other shapes other than point and cirle
-    pub fn get_position(&self) -> Point2::<f32>{
+    pub fn get_position(&self) -> Point2<f32> {
         match self {
             EmitShape::Point => Point2::new(0.0, 0.0),
             EmitShape::Circle(c) => {
@@ -353,27 +387,27 @@ impl EmitShape {
                     dir *= rand::gen_range(0.0, 1.0);
                 }
                 dir.into()
-            },
+            }
             //EmitShape::Line(v) => {Point2{x: 0.0, y: 0.0}},
             //EmitShape::Rect(r) => {Point2{x: 0.0, y: 0.0}},
             //EmitShape::Cone(c, a) => {Point2{x: 0.0, y: 0.0}},
         }
     }
 
-    pub fn get_direction(&self, velocity_type: &VelocityType
-        , position: &Point2::<f32>) -> Vector2::<f32>
-    {
+    pub fn get_direction(
+        &self,
+        velocity_type: &VelocityType,
+        _position: &Point2<f32>,
+    ) -> Vector2<f32> {
         match velocity_type {
-            VelocityType::Random => {
-                vec_from_angle(rand::gen_range(0.0, TAU))
-            },
+            VelocityType::Random => vec_from_angle(rand::gen_range(0.0, TAU)),
             VelocityType::Angle(a) => {
-                let delta = match a.max_delta { 
+                let delta = match a.max_delta {
                     Some(d) => rand::gen_range(-d, d),
                     None => 0.0,
                 };
                 vec_from_angle(a.angle + delta)
-            },
+            }
             // VelocityType::AlignToDirection(a) => {
             //     match self {
             //         EmitShape::Point => {
@@ -408,8 +442,8 @@ impl ValueGetter<ggez::graphics::Color> {
                 let r = rand::gen_range(low_r as i32, high_r as i32) as u8;
                 let g = rand::gen_range(low_g as i32, high_g as i32) as u8;
                 let b = rand::gen_range(low_b as i32, high_b as i32) as u8;
-                (r,g,b).into()
-            },
+                (r, g, b).into()
+            }
         }
     }
 }
@@ -424,7 +458,7 @@ impl ValueGetter<f32> {
     pub fn max(&self) -> f32 {
         match *self {
             ValueGetter::Single(v) => v,
-            ValueGetter::Range(v1, v2) => v2,
+            ValueGetter::Range(_v1, v2) => v2,
         }
     }
 }
@@ -438,7 +472,7 @@ pub struct ParticleSystemCollection {
 impl ParticleSystemCollection {
     pub fn new() -> Self {
         ParticleSystemCollection {
-            particle_systems: HashMap::new(), 
+            particle_systems: HashMap::new(),
             last_identifier: 0,
         }
     }
@@ -477,4 +511,32 @@ impl ParticleSystemCollection {
         }
         Ok(())
     }
+}
+
+pub fn emit_step_particle(
+    particle_collection: &mut ParticleSystemCollection,
+    step_id: &u32,
+    amount: i32,
+    is_right_dir: bool,
+    position: &na::Point2<i32>,
+    screen_size: &na::Point2<f32>,
+) {
+    let step_particle = particle_collection.get_mut(*step_id).unwrap();
+    let mut pos_particle = na::Vector2::new(
+        position.x as f32 / screen_size.x * 16.0,
+        position.y as f32 / screen_size.x * 16.0,
+    );
+
+    if is_right_dir {
+        step_particle.velocity_type = VelocityType::Angle(AngleData::new(-PI * 0.8, Some(0.2)));
+    } else {
+        step_particle.velocity_type = VelocityType::Angle(AngleData::new(PI * 0.8, Some(0.2)));
+    }
+    step_particle.scale = screen_size.x / 16.0;
+    // offset to under player
+    pos_particle.x += 16.0 * 0.5;
+    pos_particle.y += 16.0;
+    step_particle.position = pos_particle;
+
+    step_particle.emit(amount);
 }
