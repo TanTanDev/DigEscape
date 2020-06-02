@@ -187,7 +187,7 @@ pub fn system(
                     step_id,
                     9,
                     false,
-                    &player.transform.position,
+                    &player.sprite.visual_position,
                     screen_size,
                 );
             }
@@ -217,7 +217,7 @@ pub fn system(
                     step_id,
                     8,
                     true,
-                    &player.transform.position,
+                    &player.sprite.visual_position,
                     screen_size,
                 );
             }

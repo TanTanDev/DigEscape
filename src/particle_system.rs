@@ -518,7 +518,7 @@ pub fn emit_step_particle(
     step_id: &u32,
     amount: i32,
     is_right_dir: bool,
-    position: &na::Point2<i32>,
+    position: &na::Point2<f32>,
     screen_size: &na::Point2<f32>,
 ) {
     let step_particle = particle_collection.get_mut(*step_id).unwrap();
