@@ -73,7 +73,7 @@ pub fn block_system(game_state: &mut GameState, sound_collection: &mut SoundColl
                 new_skeleton.sprite.is_flipped = true;
             }
             game_state.skeletons.push(new_skeleton);
-            sound_collection.play(5);
+            let _ = sound_collection.play(5);
         }
     }
 }
@@ -130,7 +130,7 @@ pub fn walk(
             let mut is_occupied = pos_skele == pos_player;
             if is_occupied {
                 wants_attack.push(index);
-                sound_collection.play(5);
+                let _ = sound_collection.play(5);
                 continue;
             }
             is_occupied |= game_state
@@ -240,7 +240,7 @@ pub fn attack(
                 player.sprite.texture_index = 9;
                 skeleton.ai.state = AiState::Walk;
                 skeleton.sprite.texture_index = 4;
-                sound_collection.play(2);
+                let _ = sound_collection.play(2);
 
                 let blood_particles = particle_collection.get_mut(*blood_id).unwrap();
                 blood_particles.scale = screen_size.x / 16.0;
