@@ -13,7 +13,7 @@ use crate::{
 };
 use event::KeyCode;
 use ggez::{audio, event, graphics, Context, GameResult};
-use graphics::{DrawParam, FilterMode, draw};
+use graphics::{draw, DrawParam, FilterMode};
 use gwg as ggez;
 use gwg::input::keyboard::KeyMods;
 use nalgebra as na;
@@ -204,7 +204,7 @@ impl MainState {
             self.current_map,
             &self.screen_size,
         );
-        self.sound_collection.play(9);
+        let _ = self.sound_collection.play(9);
     }
 }
 
@@ -319,7 +319,8 @@ impl event::EventHandler for MainState {
         graphics::set_screen_coordinates(
             ctx,
             ggez::graphics::Rect::new(-offset_x, -offset_y, w, h),
-        ).unwrap();
+        )
+        .unwrap();
         util::force_visual_positions(&mut self.game_state, &self.screen_size);
 
         let border_width = (w - (map_w * sprite_scale)) * 0.5;
@@ -408,7 +409,8 @@ fn render_game(
         &game_state.exit.transform,
         &mut game_state.exit.sprite,
         screen_size,
-    ).unwrap();
+    )
+    .unwrap();
     for grass in &mut game_state.grasses {
         sprite::render(
             sprite_collection,
@@ -416,7 +418,8 @@ fn render_game(
             &grass.transform,
             &mut grass.sprite,
             screen_size,
-        ).unwrap();
+        )
+        .unwrap();
     }
     for skeleton_block in &mut game_state.skeleton_blocks {
         sprite::render(
@@ -425,7 +428,8 @@ fn render_game(
             &skeleton_block.transform,
             &mut skeleton_block.sprite,
             screen_size,
-        ).unwrap();
+        )
+        .unwrap();
     }
     for teleporter_option in game_state.teleporters.iter_mut().map(|t| t.as_mut()) {
         if let Some(teleporter) = teleporter_option {
@@ -435,7 +439,8 @@ fn render_game(
                 &teleporter.transform,
                 &mut teleporter.sprite,
                 screen_size,
-            ).unwrap();
+            )
+            .unwrap();
         }
     }
     for skeleton in game_state.skeletons.iter_mut() {
@@ -445,7 +450,8 @@ fn render_game(
             &skeleton.transform,
             &mut skeleton.sprite,
             screen_size,
-        ).unwrap();
+        )
+        .unwrap();
     }
     sprite::render(
         sprite_collection,
@@ -453,7 +459,8 @@ fn render_game(
         &game_state.player.transform,
         &mut game_state.player.sprite,
         screen_size,
-    ).unwrap();
+    )
+    .unwrap();
     foilage::render(game_state, sprite_collection, ctx, screen_size).unwrap();
 }
 

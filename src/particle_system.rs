@@ -1,4 +1,4 @@
-use crate::transform_compontent::TransformComponent;
+// use crate::transform_compontent::TransformComponent;
 use ggez::graphics::spritebatch::SpriteBatch;
 use ggez::graphics::{DrawParam, Image};
 use ggez::Context;
@@ -29,6 +29,7 @@ fn lerp(from: f32, to: f32, delta: f32) -> f32 {
     (1.0 - delta) * from + delta * to
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Copy)]
 pub enum TransformSpace {
     Local,
@@ -317,6 +318,7 @@ impl ParticleSystem {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Copy)]
 pub enum EmitShape {
     Point, // The position of the particle system
@@ -326,12 +328,14 @@ pub enum EmitShape {
     Circle(CircleData),
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Copy)]
 struct RectData {
     size: Vector2<f32>,
     spawn_type: SpawnType,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Copy)]
 struct ConeData {
     radius: f32,
@@ -339,12 +343,14 @@ struct ConeData {
     spawn_type: SpawnType,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Copy)]
-struct CircleData {
+pub struct CircleData {
     radius: f32,
     spawn_type: SpawnType,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Copy)]
 enum SpawnType {
     Volume,
@@ -352,6 +358,7 @@ enum SpawnType {
 }
 
 // decides how velocity should be calculated
+#[allow(dead_code)]
 #[derive(Clone, Copy)]
 pub enum VelocityType {
     //AlignToDirection(AlignToDirectionData),
@@ -497,13 +504,13 @@ impl ParticleSystemCollection {
     }
 
     // returns if system is still valid
-    pub fn emit(&mut self, system_identifier: u32, amount: i32) -> bool {
-        if let Some(system) = self.particle_systems.get_mut(&system_identifier) {
-            system.emit(amount);
-            return true;
-        }
-        false
-    }
+    // pub fn emit(&mut self, system_identifier: u32, amount: i32) -> bool {
+    //     if let Some(system) = self.particle_systems.get_mut(&system_identifier) {
+    //         system.emit(amount);
+    //         return true;
+    //     }
+    //     false
+    // }
 
     pub fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
         for (_id, system) in self.particle_systems.iter_mut() {

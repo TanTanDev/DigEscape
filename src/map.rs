@@ -123,7 +123,6 @@ pub fn load_map(
                         ..Default::default()
                     });
                 }
-                
             }
             '4' => {
                 game_state.exit = Exit {

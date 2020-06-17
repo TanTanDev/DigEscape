@@ -29,11 +29,11 @@ pub struct SpriteCollection {
     pub images: [graphics::Image; 21],
 }
 
-impl SpriteCollection {
-    pub fn get_sprite<'a, 'b: 'a>(&'a self, index: usize) -> Option<&'a graphics::Image> {
-        self.images.get(index)
-    }
-}
+// impl SpriteCollection {
+//     pub fn get_sprite<'a, 'b: 'a>(&'a self, index: usize) -> Option<&'a graphics::Image> {
+//         self.images.get(index)
+//     }
+// }
 
 pub fn render(
     sprite_collection: &SpriteCollection,
