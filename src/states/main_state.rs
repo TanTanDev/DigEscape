@@ -204,7 +204,7 @@ impl MainState {
             self.current_map,
             &self.screen_size,
         );
-        let _ = self.sound_collection.play(9);
+        self.sound_collection.play(9);
     }
 }
 

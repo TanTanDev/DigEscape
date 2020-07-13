@@ -1,6 +1,6 @@
 use gwg as ggez;
 
-use ggez::{audio, GameResult};
+use ggez::audio;
 
 pub struct SoundCollection {
     pub sounds: [audio::Source; 10],
@@ -8,13 +8,12 @@ pub struct SoundCollection {
 }
 
 impl SoundCollection {
-    pub fn play(&mut self, index: usize) -> GameResult<()> {
+    pub fn play(&mut self, index: usize) {
         if !self.is_on {
-            return Ok(());
+            return;
         }
         if let Some(source) = self.sounds.get_mut(index) {
-            source.play()?;
+            let _ = source.play();
         }
-        Err(ggez::error::GameError::SoundError)
     }
 }

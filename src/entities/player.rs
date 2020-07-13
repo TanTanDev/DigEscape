@@ -89,7 +89,7 @@ impl Player {
             if is_grounded && !self.prev_grounded {
                 self.sprite.texture_index = 0;
                 self.prev_grounded = true;
-                let _ = sound_collection.play(8);
+                sound_collection.play(8);
 
                 let mut land_particles = particle_collection.get_mut(*land_id).unwrap();
                 land_particles.scale = screen_size.x / 16.0;
@@ -140,7 +140,7 @@ pub fn system(
         .any(|s| s.transform.position == pos_below);
 
     if player.prev_grounded && !is_grounded {
-        let _ = sound_collection.play(7);
+        sound_collection.play(7);
         player.sprite.texture_index = 13;
     }
 
@@ -180,7 +180,7 @@ pub fn system(
                 occupied_by_grass || occupied_by_skeleton || occupied_by_skeleton_block;
             if !is_occupied {
                 player.transform.position = new_position;
-                let _ = sound_collection.play(0);
+                sound_collection.play(0);
 
                 particle_system::emit_step_particle(
                     particle_collection,
@@ -211,7 +211,7 @@ pub fn system(
                 occupied_by_grass || occupied_by_skeleton || occupied_by_skeleton_block;
             if !is_occupied {
                 player.transform.position = new_position;
-                let _ = sound_collection.play(0);
+                sound_collection.play(0);
                 particle_system::emit_step_particle(
                     particle_collection,
                     step_id,
@@ -243,7 +243,7 @@ pub fn system(
                     .unwrap();
                 if let Some(other_teleporter) = other_teleporter_option {
                     player.transform.position = other_teleporter.transform.position;
-                    let _ = sound_collection.play(3);
+                    sound_collection.play(3);
                     player.sprite.blink_timer = constantes::TIME_BLINK;
                     other_teleporter.sprite.blink_timer = constantes::TIME_BLINK;
                 }
@@ -257,9 +257,9 @@ pub fn system(
             if is_on_exit {
                 if all_skeletons_freed {
                     should_exit = true;
-                    let _ = sound_collection.play(4);
+                    sound_collection.play(4);
                 } else {
-                    let _ = sound_collection.play(6);
+                    sound_collection.play(6);
                     for skeleton_block in game_state.skeleton_blocks.iter_mut() {
                         skeleton_block.sprite.blink_timer = constantes::TIME_BLINK;
                     }
@@ -289,7 +289,7 @@ pub fn system(
             grass_particle_system.position = pos_particle;
             grass_particle_system.emit(20);
 
-            let _ = sound_collection.play(1);
+            sound_collection.play(1);
             player.sprite.texture_index = 8;
 
             // Foilage fly!

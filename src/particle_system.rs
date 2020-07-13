@@ -1,4 +1,3 @@
-// use crate::transform_compontent::TransformComponent;
 use ggez::graphics::spritebatch::SpriteBatch;
 use ggez::graphics::{DrawParam, Image};
 use ggez::Context;
@@ -504,13 +503,14 @@ impl ParticleSystemCollection {
     }
 
     // returns if system is still valid
-    // pub fn emit(&mut self, system_identifier: u32, amount: i32) -> bool {
-    //     if let Some(system) = self.particle_systems.get_mut(&system_identifier) {
-    //         system.emit(amount);
-    //         return true;
-    //     }
-    //     false
-    // }
+    #[allow(dead_code)]
+    pub fn emit(&mut self, system_identifier: u32, amount: i32) -> bool {
+        if let Some(system) = self.particle_systems.get_mut(&system_identifier) {
+            system.emit(amount);
+            return true;
+        }
+        false
+    }
 
     pub fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
         for (_id, system) in self.particle_systems.iter_mut() {

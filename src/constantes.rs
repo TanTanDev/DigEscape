@@ -26,8 +26,6 @@ pub const TIME_BLINK: f32 = 0.4;
 pub const TIME_AUTO_STEP: f32 = 0.2;
 pub const TIME_VISUAL_LERP: f32 = 1.0 / 0.2 * 2.0;
 
-// pub const GAME_SCALE: f32 = 5.0;
-
 pub const TOUCH_MIN_DELTA: f32 = 10.0;
 pub const TEXT_PADDING_SIZE: f32 = 0.3; // fits all text inside screen with this padding in procentage
 pub const PI: f32 = std::f32::consts::PI;
