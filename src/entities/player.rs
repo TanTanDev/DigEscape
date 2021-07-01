@@ -249,6 +249,14 @@ pub fn system(
                     sound_collection.play(3);
                     player.sprite.blink_timer = constantes::TIME_BLINK;
                     other_teleporter.sprite.blink_timer = constantes::TIME_BLINK;
+
+                    let skeleton_option = game_state
+                        .skeletons
+                        .iter_mut()
+                        .find(|s| s.transform.position == other_teleporter.transform.position);
+                    if let Some(skeleton) = skeleton_option {
+                        skeleton.ai.state = AiState::Attack;
+                    }
                 }
             }
             // Exit

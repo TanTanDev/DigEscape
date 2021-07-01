@@ -244,10 +244,11 @@ pub fn attack(
 
                 let blood_particles = particle_collection.get_mut(*blood_id).unwrap();
                 blood_particles.scale = screen_size.x / 16.0;
-                let pos_player_visual = player.sprite.visual_position;
+                // Use the skeleton position to handle teleports
+                let pos_skeleton_visual = skeleton.sprite.visual_position;
                 let mut pos_particle = na::Vector2::new(
-                    pos_player_visual.x / screen_size.x * 16.0,
-                    pos_player_visual.y / screen_size.x * 16.0,
+                    pos_skeleton_visual.x / screen_size.x * 16.0,
+                    pos_skeleton_visual.y / screen_size.x * 16.0,
                 );
                 pos_particle += na::Vector2::new(16.0 * 0.5, 16.0 * 0.5);
 
