@@ -2,6 +2,7 @@ use crate::constantes;
 use crate::entities::{
     foilage::Grass,
     skeleton::{Skeleton, SkeletonBlock},
+    ai::AiState
 };
 use crate::particle_system;
 use crate::particle_system::ParticleSystemCollection;
@@ -242,10 +243,20 @@ pub fn system(
                     .get_mut(other_teleporter_index)
                     .unwrap();
                 if let Some(other_teleporter) = other_teleporter_option {
+                    // Force visual insta jump
                     player.transform.position = other_teleporter.transform.position;
+                    player.sprite.visual_position = other_teleporter.sprite.visual_position;
                     sound_collection.play(3);
                     player.sprite.blink_timer = constantes::TIME_BLINK;
                     other_teleporter.sprite.blink_timer = constantes::TIME_BLINK;
+
+                    let skeleton_option = game_state
+                        .skeletons
+                        .iter_mut()
+                        .find(|s| s.transform.position == other_teleporter.transform.position);
+                    if let Some(skeleton) = skeleton_option {
+                        skeleton.ai.state = AiState::Attack;
+                    }
                 }
             }
             // Exit
